@@ -1,4 +1,4 @@
-# wlsaplus-vpn-core
+# MockMini
 
 Original native VPN / packet core used by [WLSAPlus for macOS](https://github.com/yezicheng2011/wlsaplus-enablemacos).
 
