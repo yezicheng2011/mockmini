@@ -61,13 +61,18 @@ App-only glue that stays in the application repository:
 ## Build / test
 
 ```bash
-# Portable packet engine (Linux or macOS)
-mkdir -p .build
-cc -std=c11 -g -Wall -Wextra -Werror \
-  Sources/Packet/wlp.c Sources/Packet/utun.c Tests/packet_test.c \
-  -o .build/packet-tests
-./.build/packet-tests
+# Portable packet engine (Linux or macOS): unit tests + stateful fuzzer, ASan/UBSan
+bash scripts/run-packet-tests.sh
+
+# Longer fuzz run, or replay one seed
+MOCKMINI_FUZZ_STEPS=5000000 bash scripts/run-packet-tests.sh
+MOCKMINI_FUZZ_SEED=42 ./.build/packet-fuzz
 ```
+
+The fuzzer (`Tests/packet_fuzz.c`) builds checksum-valid traffic so it reaches the TCP state
+machine, reassembly, fragment cache and flow limit (≈99% line coverage of `wlp.c`), and checks
+byte-exact in-order delivery plus well-formed output on every callback. CI runs it on Linux
+(gcc/clang), as a libFuzzer smoke, and on macOS together with the Swift protocol tests.
 
 Swift protocol tests and Network.framework transport require macOS 13+ SDKs
 (see the app’s `native/scripts/test.sh`).

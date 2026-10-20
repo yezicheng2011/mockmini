@@ -1,0 +1,61 @@
+name: MockMini CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mockmini-ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  packet-linux:
+    name: Packet engine (Linux, ${{ matrix.cc }}, ASan/UBSan)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests + stateful fuzzer
+        env:
+          CC: ${{ matrix.cc }}
+          MOCKMINI_FUZZ_STEPS: '1000000'
+        run: bash scripts/run-packet-tests.sh
+      - name: Optimized build without sanitizers (-O2 -Wpedantic)
+        run: |
+          ${{ matrix.cc }} -std=c11 -O2 -Wall -Wextra -Werror -Wpedantic \
+            Sources/Packet/wlp.c Sources/Packet/utun.c Tests/packet_test.c -o .build/packet-tests-o2
+          .build/packet-tests-o2
+  packet-libfuzzer:
+    name: Packet engine libFuzzer smoke (60s)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run libFuzzer harness
+        run: |
+          mkdir -p .build/corpus
+          clang -std=c11 -g -O1 -DMOCKMINI_LIBFUZZER -fsanitize=fuzzer,address,undefined \
+            -fno-sanitize-recover=all Sources/Packet/wlp.c Tests/packet_fuzz.c -o .build/packet-libfuzzer
+          .build/packet-libfuzzer -max_total_time=60 -max_len=65536 -print_final_stats=1 .build/corpus
+  macos:
+    name: macOS (packet engine + Swift protocol tests)
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Packet engine (clang, ASan/UBSan, real utun build)
+        env:
+          MOCKMINI_FUZZ_STEPS: '400000'
+        run: bash scripts/run-packet-tests.sh
+      - name: Swift protocol tests (CryptoKit / Network.framework)
+        run: |
+          mkdir -p .build
+          xcrun swiftc -swift-version 5 -parse-as-library \
+            Sources/VPN/*.swift Tests/ProtocolTests.swift Tests/ProtocolMain.swift \
+            -o .build/protocol-tests
+          .build/protocol-tests
