@@ -26,7 +26,7 @@ public enum ShadowsocksCipher: String, CaseIterable {
 
     func seal(_ plain: Data, key: Data, nonce: Data) throws -> Data {
         switch self {
-        case .aes128gcm, .aes256gcm: return try cipher.seal(plain, key: key, nonce: nonce)
+        case .aes128gcm, .aes256gcm: return try ProtocolCrypto.seal(plain, key: key, nonce: nonce)
         case .chacha20poly1305:
             let box = try ChaChaPoly.seal(plain, using: SymmetricKey(data: key), nonce: ChaChaPoly.Nonce(data: nonce))
             return box.ciphertext + box.tag
@@ -34,7 +34,7 @@ public enum ShadowsocksCipher: String, CaseIterable {
     }
     func open(_ encrypted: Data, key: Data, nonce: Data) throws -> Data {
         switch self {
-        case .aes128gcm, .aes256gcm: return try cipher.open(encrypted, key: key, nonce: nonce)
+        case .aes128gcm, .aes256gcm: return try ProtocolCrypto.open(encrypted, key: key, nonce: nonce)
         case .chacha20poly1305:
             guard encrypted.count >= 16 else { throw ProxyError.authentication }
             do {
