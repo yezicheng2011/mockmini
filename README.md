@@ -44,7 +44,7 @@ The packet engine is a **small TCP/UDP proxy endpoint**, not a general IP stack:
 | TCP options negotiated | **MSS only** (no window scaling, SACK, timestamps, ECN) |
 | Unsupported | ICMP, PMTUD, IPv6 jumbograms, IPsec, TCP urgent |
 
-Protocol surface today: **Shadowsocks AEAD (aes-128-gcm, aes-256-gcm, chacha20-ietf-poly1305)**, **VMess** (legacy + AEAD) over
+Protocol surface today: **Shadowsocks AEAD (aes-128-gcm, aes-256-gcm, chacha20-ietf-poly1305)**, **VMess** (legacy + AEAD; aes-128-gcm or chacha20-poly1305 body) over
 TCP or WebSocket+TLS. Throughput and edge protocols are still behind mature Clash/mihomo
 kernels; that gap is expected while MockMini stays original and small.
 
