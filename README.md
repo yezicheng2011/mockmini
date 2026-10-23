@@ -41,7 +41,7 @@ The packet engine is a **small TCP/UDP proxy endpoint**, not a general IP stack:
 | Unacked remote TCP data | 256 KiB / flow |
 | UDP hold before remote open | 32 datagrams / 64 KiB |
 | Fragment reassembly | 16 datagrams, 15s expiry |
-| TCP options negotiated | **MSS only** (no window scaling, SACK, timestamps, ECN) |
+| TCP options negotiated | **MSS + window scaling** (RFC 7323 receive side: client shift honoured up to 14, we echo shift 0; no SACK, timestamps, ECN) |
 | Unsupported | ICMP, PMTUD, IPv6 jumbograms, IPsec, TCP urgent |
 
 Protocol surface today: **Shadowsocks AEAD (aes-128-gcm, aes-256-gcm, chacha20-ietf-poly1305)**, **VMess** (legacy + AEAD; aes-128-gcm or chacha20-poly1305 body) over
