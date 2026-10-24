@@ -12,7 +12,8 @@
 - `ProtocolTests.swift` + `ProtocolMain.swift` — crypto/wire fixtures; compile together with
   `Sources/VPN/*.swift` on macOS with CryptoKit (`-parse-as-library`).
 - `InteropMain.swift` + `interop/` — real-server interop. `scripts/run-interop.sh` starts Xray
-  (Shadowsocks ×3 ciphers, VMess, VMess+WS+TLS, Trojan, Trojan+WS+TLS) and a TCP/UDP echo
+  (Shadowsocks ×3 ciphers, VMess, VMess+WS+TLS, Trojan, Trojan+WS+TLS, VLESS, VLESS+TLS,
+  VLESS+WS+TLS) and a TCP/UDP echo
   server on loopback with a throwaway CA, then streams position-checked bytes and datagrams
   through MockMini's client. The Xray binary is supplied by the caller, never stored here.
 

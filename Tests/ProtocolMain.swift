@@ -11,9 +11,9 @@ enum ProtocolMain {
         do {
             try ProtocolTests.run()
             #if canImport(CommonCrypto) && canImport(Network)
-            let scope = "primitives, Shadowsocks, VMess, Trojan, WebSocket, config, transport plans, resolver"
+            let scope = "primitives, Shadowsocks, VMess, Trojan, VLESS, WebSocket, config, transport plans, resolver"
             #else
-            let scope = "portable core: primitives, Shadowsocks, WebSocket, config, transport plans"
+            let scope = "portable core: primitives, Shadowsocks, VLESS, WebSocket, config, transport plans"
             #endif
             print("protocol tests passed: \(scope)")
         } catch {

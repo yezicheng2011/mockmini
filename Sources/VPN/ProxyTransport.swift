@@ -80,6 +80,9 @@ final class ProxyConnection {
             }
             return try ShadowsocksSession(password: password, destinationHost: host,
                                           destinationPort: port, udp: udp, cipher: method)
+        case "vless":
+            return try VLESSSession(uuid: node.uuid ?? "", destinationHost: host,
+                                    destinationPort: port, udp: udp)
         case "trojan":
             return try TrojanSession(password: node.password ?? "", destinationHost: host,
                                      destinationPort: port, udp: udp)

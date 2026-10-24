@@ -32,6 +32,9 @@ enum InteropMain {
             (node("vmess-ws-tls", "vmess", 10087, uuid: uuid, tls: true, network: "ws", path: "/vmess"), 4 * mib, true),
             (node("trojan-tls", "trojan", 10443, password: "mockmini-trojan"), 4 * mib, true),
             (node("trojan-ws-tls", "trojan", 10444, password: "mockmini-trojan", network: "ws", path: "/trojan"), 4 * mib, true),
+            (node("vless", "vless", 10500, uuid: uuid), 4 * mib, true),
+            (node("vless-tls", "vless", 10501, uuid: uuid, tls: true), 4 * mib, true),
+            (node("vless-ws-tls", "vless", 10502, uuid: uuid, tls: true, network: "ws", path: "/vless"), 4 * mib, true),
         ]
         if let long = Int(environment["MOCKMINI_INTEROP_LONG_MB"] ?? ""), long > 0 {
             // VMess body nonces are 16-bit and wrap after 65,536 chunks (about 1 GiB).

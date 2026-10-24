@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Real-server interop: Xray serves Shadowsocks, VMess, VMess+WS+TLS, Trojan and
-# Trojan+WS+TLS on loopback; MockMini's own client streams verified TCP bytes and UDP
+# Real-server interop: Xray serves Shadowsocks, VMess, VMess+WS+TLS, Trojan, Trojan+WS+TLS,
+# VLESS, VLESS+TLS and VLESS+WS+TLS on loopback; MockMini's own client streams verified TCP bytes and UDP
 # datagrams through each to a local echo server.
 #   XRAY=/path/to/xray            server binary (CI fetches a pinned, checksummed release)
 #   MOCKMINI_TRUST_CA=1           trust the generated test CA in the System keychain (sudo);
@@ -44,7 +44,7 @@ fi
 cp "$ROOT/Tests/interop/xray.json" config.json
 python3 "$ROOT/Tests/interop/echo.py" "$ECHO_PORT" & ECHO_PID=$!
 "$XRAY" run -c config.json > xray.log 2>&1 & XRAY_PID=$!
-for port in "$ECHO_PORT" 10388 10389 10390 10086 10087 10443 10444; do
+for port in "$ECHO_PORT" 10388 10389 10390 10086 10087 10443 10444 10500 10501 10502; do
   for _ in $(seq 50); do (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null && break; sleep 0.1; done
   (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null || { echo "port $port never opened"; cat xray.log; exit 1; }
 done

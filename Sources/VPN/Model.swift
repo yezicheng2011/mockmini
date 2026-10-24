@@ -34,16 +34,19 @@ public struct ProxyNode: Codable, Hashable, Identifiable, Sendable {
     public var wsPath: String?
     public var wsHost: String?
     public var udp: Bool?
+    /// VLESS flow control (e.g. xtls-rprx-vision); only the plain flow is supported today.
+    public var flow: String?
 
     public init(id: String, name: String, type: String, server: String, port: UInt16,
                 cipher: String? = nil, password: String? = nil, uuid: String? = nil,
                 alterId: Int? = nil, tls: Bool? = nil, serverName: String? = nil,
                 skipCertVerify: Bool? = nil, network: String? = nil,
-                wsPath: String? = nil, wsHost: String? = nil, udp: Bool? = nil) {
+                wsPath: String? = nil, wsHost: String? = nil, udp: Bool? = nil, flow: String? = nil) {
         self.id = id; self.name = name; self.type = type; self.server = server; self.port = port
         self.cipher = cipher; self.password = password; self.uuid = uuid; self.alterId = alterId
         self.tls = tls; self.serverName = serverName; self.skipCertVerify = skipCertVerify
         self.network = network; self.wsPath = wsPath; self.wsHost = wsHost; self.udp = udp
+        self.flow = flow
     }
 
     /// Trojan always runs inside TLS, so subscriptions often leave `tls` unset for it.
@@ -75,6 +78,19 @@ public struct ProxyNode: Codable, Hashable, Identifiable, Sendable {
             }
             guard ["tcp", "ws"].contains((network ?? "tcp").lowercased()) else {
                 throw ProxyError.unsupported("VMess requires TCP or WebSocket transport")
+            }
+        case "vless":
+            guard UUID(uuidString: uuid ?? "") != nil else {
+                throw ProxyError.configuration("VLESS requires a valid UUID")
+            }
+            guard (cipher ?? "none").lowercased() == "none" || cipher == "" else {
+                throw ProxyError.unsupported("VLESS encryption must be none; use TLS for transport security")
+            }
+            guard (flow ?? "").isEmpty else {
+                throw ProxyError.unsupported("VLESS flow control (e.g. xtls-rprx-vision) is not supported")
+            }
+            guard ["tcp", "ws"].contains((network ?? "tcp").lowercased()) else {
+                throw ProxyError.unsupported("VLESS requires TCP or WebSocket transport")
             }
         case "trojan":
             guard let password, !password.isEmpty else {
