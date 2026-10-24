@@ -36,9 +36,10 @@ The packet engine is a **small TCP/UDP proxy endpoint**, not a general IP stack:
 
 | Limit | Value |
 |-------|--------|
-| Concurrent flows | **128** |
-| TCP receive reassembly | 32 KiB / flow |
-| Unacked remote TCP data | 256 KiB / flow |
+| Concurrent flows | **1024** (hash lookup by tuple and id) |
+| TCP receive reassembly | 32 KiB / flow, allocated on use, freed after 1s empty |
+| Unacked remote TCP data | 256 KiB / flow, allocated on use, freed after 1s empty |
+| Send queues held at once | **128** (32 MiB); `wlp_remote_capacity` reports 0 for others until one frees |
 | UDP hold before remote open | 32 datagrams / 64 KiB |
 | Fragment reassembly | 16 datagrams, 15s expiry |
 | TCP options negotiated | **MSS + window scaling** (RFC 7323 receive side: client shift honoured up to 14, we echo shift 0; no SACK, timestamps, ECN) |

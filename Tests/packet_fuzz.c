@@ -8,7 +8,7 @@
  *
  *   - flow ids are fresh on connect; data/eof/close only for live ids;
  *     close at most once, eof at most once, no TCP data after eof;
- *   - at most 128 live flows;
+ *   - at most WLP_FLOW_LIMIT live flows (the stress build lowers it below TUPLES);
  *   - delivered TCP bytes are exactly the client stream, in order (payload
  *     bytes are a pure function of tuple + sequence number, so any
  *     misordering, duplication or corruption is caught);
@@ -32,7 +32,7 @@
 #define PSH 8u
 #define ACK 16u
 #define URG 32u
-#define TUPLES 160u          /* > 128 so the flow limit is exercised */
+#define TUPLES 160u          /* > the stress build's flow limit, so the limit is exercised */
 #define MSS_CAP 1200u
 #define TX_CAP 262144u
 #define RX_CAP 32768u
@@ -130,7 +130,7 @@ static void on_connect(void *ctx, uint64_t id, const char *host, uint16_t port, 
     memset(s, 0, sizeof(*s)); s->live = 1; s->udp = udp; s->t = (unsigned)w->in_input;
     s->isn = t->client_isn;  /* a later SYN with a new ISN on this tuple must not move the stream origin */
     t->id = id; t->have_server = 0;
-    REQUIRE(++w->live <= 128);
+    REQUIRE(++w->live <= WLP_FLOW_LIMIT);
 }
 static void on_data(void *ctx, uint64_t id, const uint8_t *bytes, size_t n) {
     world *w = ctx; shadow *s = lookup(w, id);
@@ -441,7 +441,7 @@ static void run(source *s, unsigned long steps) {
             if (pick(s, 50) == 0 && w->now > 10) dt = 0;          /* repeat timestamp */
             w->now += dt; wlp_tick(e, w->now);
         }
-        REQUIRE(w->live <= 128);
+        REQUIRE(w->live <= WLP_FLOW_LIMIT);
     }
     wlp_free(e);
     REQUIRE(w->live == 0);                                     /* free closes every flow */

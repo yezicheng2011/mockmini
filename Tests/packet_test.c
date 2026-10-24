@@ -87,6 +87,13 @@ static size_t udp(uint8_t *p, int version, int extension, const void *data, size
     s16(u + 6, sum ? sum : 65535);
     return offset + 8 + length;
 }
+/* Give an IPv4 test packet the distinct source 10.0.x.y (x.y = index) and refresh checksums. */
+static void source_index(uint8_t *p, size_t n, unsigned index) {
+    size_t sum = p[9] == 6 ? 36 : 26;
+    p[14] = (uint8_t)(index >> 8); p[15] = (uint8_t)index;
+    p[10] = p[11] = 0; s16(p + 10, checksum(p, 20));
+    p[sum] = p[sum + 1] = 0; s16(p + sum, pseudo(p, 20, n - 20, p[9]));
+}
 static size_t offset(const packet *p) { return p->bytes[0] >> 4 == 4 ? 20 : 40; }
 static uint8_t flags(const packet *p) { return p->bytes[offset(p) + 13]; }
 static uint32_t sequence(const packet *p) { return u32(p->bytes + offset(p) + 4); }
@@ -223,13 +230,63 @@ static void test_limits_timeouts_and_fast_retransmit(void) {
     e = engine(o); n = tcp(p, 4, 1, 0, SYN, 1234, NULL, 0); assert(wlp_input(e, p, n) == 0);
     wlp_tick(e, 15000); assert(o->closes == 1 && (flags(last(o)) & RST)); wlp_free(e);
     e = engine(o);
-    for (unsigned i = 0; i < 129; ++i) {
-        n = udp(p, 4, 0, "x", 1); p[15] = (uint8_t)(i + 1); p[10] = p[11] = 0; s16(p + 10, checksum(p, 20));
-        p[26] = p[27] = 0; s16(p + 26, pseudo(p, 20, 9, 17));
-        assert(wlp_input(e, p, n) == (i < 128 ? 0 : -1));
+    for (unsigned i = 0; i <= WLP_FLOW_LIMIT; ++i) {
+        n = udp(p, 4, 0, "x", 1); source_index(p, n, i + 1);
+        assert(wlp_input(e, p, n) == (i < WLP_FLOW_LIMIT ? 0 : -1));
     }
-    assert(o->connects == 128); wlp_remote_abort(e, o->id); assert(o->closes == 1);
-    assert(wlp_remote_capacity(e, o->id) == 0); wlp_free(e); assert(o->closes == 128); free(o);
+    /* Every flow stays reachable by tuple and by id once the table is full. */
+    for (unsigned i = 0; i < WLP_FLOW_LIMIT; i += 97) {
+        n = udp(p, 4, 0, "y", 1); source_index(p, n, i + 1); assert(wlp_input(e, p, n) == 0);
+        wlp_remote_open(e, i + 1); assert(wlp_remote_capacity(e, i + 1) == 65507);
+    }
+    assert(o->connects == WLP_FLOW_LIMIT); wlp_remote_abort(e, o->id); assert(o->closes == 1);
+    assert(wlp_remote_capacity(e, o->id) == 0);
+    n = udp(p, 4, 0, "x", 1); source_index(p, n, WLP_FLOW_LIMIT + 1); assert(wlp_input(e, p, n) == 0);
+    wlp_free(e); assert(o->closes == WLP_FLOW_LIMIT + 1); free(o);
+}
+/* Send queues beyond WLP_TX_BUFFERS wait (capacity 0) until an idle queue is released. */
+static void test_transmit_budget(void) {
+    observer *o = calloc(1, sizeof(*o)); assert(o); wlp_engine *e = engine(o); uint8_t p[256];
+    uint32_t servers[WLP_TX_BUFFERS + 1];
+    for (unsigned i = 0; i <= WLP_TX_BUFFERS; ++i) {
+        o->packet_count = 0;
+        size_t n = tcp(p, 4, 100, 0, SYN, 32768, NULL, 0); source_index(p, n, i + 1);
+        assert(wlp_input(e, p, n) == 0 && o->id == i + 1);
+        wlp_remote_open(e, o->id); servers[i] = sequence(last(o)) + 1;
+        n = tcp(p, 4, 101, servers[i], ACK, 32768, NULL, 0); source_index(p, n, i + 1);
+        assert(wlp_input(e, p, n) == 0);
+        assert(wlp_remote_capacity(e, o->id) == (i < WLP_TX_BUFFERS ? 262144u : 0u));
+        if (i < WLP_TX_BUFFERS) assert(wlp_remote_data(e, o->id, (const uint8_t *)"x", 1) == 0);
+    }
+    uint64_t waiting = WLP_TX_BUFFERS + 1;
+    o->packet_count = 0;
+    size_t n = tcp(p, 4, 101, servers[0] + 1, ACK, 32768, NULL, 0); source_index(p, n, 1);
+    assert(wlp_input(e, p, n) == 0);
+    assert(wlp_remote_capacity(e, 1) == 262144 && wlp_remote_capacity(e, waiting) == 0);
+    wlp_tick(e, 999); assert(wlp_remote_capacity(e, waiting) == 0);
+    for (uint64_t now = 1000; now <= 4000 && wlp_remote_capacity(e, waiting) == 0; now += 100) {
+        o->packet_count = 0; wlp_tick(e, now);
+    }
+    assert(wlp_remote_capacity(e, waiting) == 262144 && wlp_remote_capacity(e, 2) == 262143);
+    o->packet_count = 0;
+    assert(wlp_remote_data(e, waiting, (const uint8_t *)"y", 1) == 0 && payload_size(last(o)) == 1);
+    wlp_free(e); assert(o->closes == WLP_TX_BUFFERS + 1); free(o);
+}
+/* Receive buffers come and go with use; data and FIN still arrive intact. */
+static void test_receive_buffer_release(void) {
+    observer *o = calloc(1, sizeof(*o)); assert(o); wlp_engine *e = engine(o); uint8_t p[512];
+    uint32_t server = handshake(e, o, 4, 800, 32768);
+    size_t n = tcp(p, 4, 806, server, ACK | PSH, 32768, "world", 5); assert(wlp_input(e, p, n) == 0);
+    wlp_tick(e, 5000); assert(o->data_length == 0);   /* out-of-order bytes are kept */
+    n = tcp(p, 4, 801, server, ACK | PSH, 32768, "hello", 5); assert(wlp_input(e, p, n) == 0);
+    assert(o->data_length == 10 && memcmp(o->data, "helloworld", 10) == 0);
+    wlp_tick(e, 7000);                                 /* empty for 2 s: released */
+    n = tcp(p, 4, 811, server, ACK | PSH, 32768, "again", 5); assert(wlp_input(e, p, n) == 0);
+    assert(o->data_length == 15 && acknowledge(last(o)) == 816);
+    wlp_tick(e, 9000);
+    n = tcp(p, 4, 816, server, ACK | FIN, 32768, NULL, 0); assert(wlp_input(e, p, n) == 0);
+    assert(o->eofs == 1 && acknowledge(last(o)) == 817);
+    wlp_free(e); free(o);
 }
 static size_t fragment_packet(uint8_t *out, const uint8_t *whole, size_t start, size_t count, int more, uint32_t id) {
     int version = whole[0] >> 4;
@@ -472,7 +529,7 @@ int main(void) {
     test_window_ack_reset();
     test_ipv6_wrap_and_fin_gap();
     test_udp(4, 0); test_udp(6, 0); test_udp(6, 1);
-    test_limits_timeouts_and_fast_retransmit();
+    test_limits_timeouts_and_fast_retransmit(); test_transmit_budget(); test_receive_buffer_release();
     test_fragment_reassembly(4, 0); test_fragment_reassembly(6, 0); test_fragment_reassembly(6, 1);
     test_maximum_fragment_payload(4); test_maximum_fragment_payload(6);
     test_fragment_rejection_and_expiry(); test_tcp_option_policy(); test_window_scaling(); test_malformed();
