@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="MockMini — a small, auditable proxy core in C and Swift. Shadowsocks AEAD, VMess, WebSocket, fuzzed packet engine. Apache License 2.0.">
+  <meta name="description" content="MockMini — a small, auditable proxy core in C and Swift. Shadowsocks AEAD, VMess, Trojan, WebSocket, fuzzed packet engine. Apache License 2.0.">
   <meta name="theme-color" content="#f6f5f1">
   <title>MockMini — small proxy core</title>
   <link rel="canonical" href="https://mockmini.danielye2011.uk/">
@@ -160,7 +160,7 @@
       <h1>MockMini</h1>
       <p class="lede">
         A small, auditable proxy core in C and Swift —
-        userspace IP forwarding, Shadowsocks AEAD, VMess, and WebSocket transport.
+        userspace IP forwarding, Shadowsocks AEAD, VMess, Trojan, and WebSocket transport.
         Not derived from mihomo, Clash, sing-box, gVisor, or WireGuard. Under continuous open development.
       </p>
       <div class="actions">
@@ -171,7 +171,7 @@
         <p>
           MockMini is a complete network path for proxy clients: a bounded,
           fuzzed packet engine with a macOS <code>utun</code> adapter, plus
-          protocol framing for common proxy transports. About 2,500 lines,
+          protocol framing for common proxy transports. About 2,600 lines,
           Apache-2.0, ready to embed in open- or closed-source apps.
         </p>
       </section>
@@ -179,7 +179,7 @@
         <h2 id="ongoing">Continuous development</h2>
         <p>
           MockMini is strengthened in ongoing passes: IPv4-first dial failover,
-          clearer dial / WebSocket upgrade errors, Shadowsocks and VMess wire tests,
+          clearer dial / WebSocket upgrade errors, Shadowsocks, VMess and Trojan wire tests,
           a 1024-flow packet engine, and an honest limit surface. All work
           happens in the public GitHub tree.
         </p>

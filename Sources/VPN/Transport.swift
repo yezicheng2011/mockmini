@@ -116,7 +116,7 @@ final class NetworkByteTransport: ByteTransport {
             tcp.keepaliveIdle = 60
             // Keep each SYN attempt shorter than the outer probe so failover can run.
             tcp.connectionTimeout = Int(self.perAttemptSeconds)
-            if node.tls == true {
+            if node.usesTLS {
                 let tls = NWProtocolTLS.Options()
                 let name = node.serverName?.isEmpty == false ? node.serverName! : node.server
                 guard !name.isEmpty, name.utf8.allSatisfy({ $0 > 32 && $0 < 127 }) else {

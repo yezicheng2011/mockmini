@@ -17,6 +17,7 @@ enum ProtocolTests {
         try vmessFrames()
         try vmessChaChaFrames()
         try vmessCounterWrap()
+        try trojanFrames()
         try byteQueue()
         try websocketFrames()
         try configurationValidation()
@@ -263,6 +264,49 @@ enum ProtocolTests {
         try reader.finishReceiving()
     }
 
+    // Trojan fixtures computed with Python hashlib from the public protocol description.
+    private static let trojanConnect = "64363364633931396532303164376263346338323536333064326366323566646339336434623266306434363730366432393033386430310d0a01030b6578616d706c652e636f6d01bb0d0a"
+    private static let trojanAssociate = "64363364633931396532303164376263346338323536333064326366323566646339336434623266306434363730366432393033386430310d0a0301c000020100350d0a"
+    private static let trojanServerDatagrams = "01c0000201003500030d0a6f6e65030b646e732e6578616d706c65003500000d0a0420010db8000000000000000000000001003500030d0a74776f"
+    private static func trojanFrames() throws {
+        try check(TrojanSession.token("password") == Data("d63dc919e201d7bc4c825630d2cf25fdc93d4b2f0d46706d29038d01".utf8), "Trojan SHA-224 hex token")
+        try check(TrojanSession.token("pässwörd") == Data("1fa1dc9715a45491364693be5cfc25e1e8478204b8b4ef6deee9d3b3".utf8), "Trojan token hashes UTF-8")
+        let stream = try TrojanSession(password: "password", destinationHost: "example.com", destinationPort: 443, udp: false)
+        try check(try stream.requestHeader() == hex(trojanConnect), "Trojan CONNECT request wire fixture")
+        try fails("Trojan header sent twice") { _ = try stream.requestHeader() }
+        try fails("Trojan TCP session has no datagram framing") { _ = try stream.encodeDatagram(Data([1])) }
+        try fails("Trojan empty password") {
+            _ = try TrojanSession(password: "", destinationHost: "example.com", destinationPort: 443, udp: false)
+        }
+
+        let datagrams = try TrojanSession(password: "password", destinationHost: "192.0.2.1", destinationPort: 53, udp: true)
+        try fails("Trojan datagram before request") { _ = try datagrams.encodeDatagram(Data("hello".utf8)) }
+        try check(try datagrams.requestHeader() == hex(trojanAssociate), "Trojan UDP ASSOCIATE request wire fixture")
+        try check(try datagrams.encodeDatagram(Data("hello".utf8)) == hex("01c0000201003500050d0a68656c6c6f"), "Trojan UDP packet wire fixture")
+        try check(try datagrams.encodeDatagram(Data()).count == 11, "Trojan carries empty UDP datagrams")
+        try fails("Trojan oversized UDP datagram") { _ = try datagrams.encodeDatagram(Data(count: TrojanSession.maxDatagram + 1)) }
+
+        let vector = hex(trojanServerDatagrams)
+        let expected = [Data("one".utf8), Data(), Data("two".utf8)]
+        var whole = try TrojanSession(password: "password", destinationHost: "192.0.2.1", destinationPort: 53, udp: true)
+        try check(try whole.decodeDatagrams(vector) == expected, "Trojan IPv4, domain and IPv6 source datagrams")
+        try whole.finishReceiving()
+        whole = try TrojanSession(password: "password", destinationHost: "192.0.2.1", destinationPort: 53, udp: true)
+        var split = [Data]()
+        for byte in vector { split += try whole.decodeDatagrams(Data([byte])) }
+        try check(split == expected, "Trojan UDP stream split at every byte")
+        try whole.finishReceiving()
+
+        let truncated = try TrojanSession(password: "password", destinationHost: "192.0.2.1", destinationPort: 53, udp: true)
+        try check(try truncated.decodeDatagrams(Data(vector.prefix(16))) == [Data("one".utf8)], "Trojan delivers complete datagrams before a partial one")
+        try fails("Trojan stream ends inside a datagram") { try truncated.finishReceiving() }
+        for bad in ["05c0000201003500030d0a6f6e65", "01c0000201003500030a0d6f6e65", "030000350000"] {
+            let session = try TrojanSession(password: "password", destinationHost: "192.0.2.1", destinationPort: 53, udp: true)
+            try fails("Trojan malformed UDP framing \(bad)") { _ = try session.decodeDatagrams(hex(bad)) }
+        }
+        try fails("Trojan TCP session rejects datagram decoding") { _ = try stream.decodeDatagrams(vector) }
+    }
+
     private static func byteQueue() throws {
         var queue = ByteQueue(), reference = Data(), next: UInt8 = 0
         for round in 0..<2_000 {
@@ -352,6 +396,20 @@ enum ProtocolTests {
             _ = try ShadowsocksSession(password: "", destinationHost: "example.com",
                                        destinationPort: 443, udp: false)
         }
+        var trojan = ProxyNode(id: "trojan", name: "Trojan", type: "trojan", server: "example.com", port: 443,
+                               password: "secret", udp: true)
+        try trojan.validate()
+        try check(trojan.usesTLS && !ss.usesTLS && node.usesTLS, "Trojan implies TLS; Shadowsocks does not")
+        trojan.network = "ws"; trojan.wsPath = "/trojan"
+        try trojan.validate()
+        trojan.network = "grpc"
+        try fails("Trojan gRPC transport") { try trojan.validate() }
+        trojan.network = nil; trojan.tls = false
+        try fails("Trojan without TLS") { try trojan.validate() }
+        trojan.tls = nil; trojan.password = ""
+        try fails("Trojan empty password") { try trojan.validate() }
+        trojan.password = "secret"; trojan.skipCertVerify = true
+        try fails("Trojan insecure TLS") { try trojan.validate() }
         try check(ProxyError.dial("x").errorDescription == "x", "dial error surfaces message")
     }
 

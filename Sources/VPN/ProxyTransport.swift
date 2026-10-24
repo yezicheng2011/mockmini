@@ -34,6 +34,9 @@ public struct ProxyNode: Codable, Hashable, Identifiable, Sendable {
         self.network = network; self.wsPath = wsPath; self.wsHost = wsHost; self.udp = udp
     }
 
+    /// Trojan always runs inside TLS, so subscriptions often leave `tls` unset for it.
+    var usesTLS: Bool { tls == true || type.lowercased() == "trojan" }
+
     public func validate() throws {
         guard !server.isEmpty, !server.contains(where: { $0.isWhitespace || $0.isNewline }),
               port != 0 else { throw ProxyError.configuration("Missing server address or port") }
@@ -60,6 +63,14 @@ public struct ProxyNode: Codable, Hashable, Identifiable, Sendable {
             }
             guard ["tcp", "ws"].contains((network ?? "tcp").lowercased()) else {
                 throw ProxyError.unsupported("VMess requires TCP or WebSocket transport")
+            }
+        case "trojan":
+            guard let password, !password.isEmpty else {
+                throw ProxyError.configuration("Trojan requires a non-empty password")
+            }
+            guard tls != false else { throw ProxyError.unsupported("Trojan always runs over TLS") }
+            guard ["tcp", "ws"].contains((network ?? "tcp").lowercased()) else {
+                throw ProxyError.unsupported("Trojan requires TCP or WebSocket transport")
             }
         default: throw ProxyError.unsupported("Unsupported proxy protocol")
         }
@@ -88,6 +99,7 @@ public enum ProxyError: LocalizedError {
 /// `onReady` means the transport is connected and the request header has been queued;
 /// it does not assert that the remote proxy accepted credentials or reached the destination.
 /// VMess standard framing rejects empty UDP datagrams because they encode stream termination.
+/// Trojan UDP rides inside its TLS stream, so it dials TCP like every non-Shadowsocks protocol.
 final class ProxyConnection {
     var onReady: (() -> Void)?
     var onData: ((Data) -> Void)?
@@ -102,6 +114,7 @@ final class ProxyConnection {
     private var transport: ByteTransport?
     private var shadowsocks: ShadowsocksSession?
     private var vmess: VMessSession?
+    private var trojan: TrojanSession?
     private var started = false
     private var ready = false
     private var closed = false
@@ -131,7 +144,8 @@ final class ProxyConnection {
             try node.validate()
             guard port != 0 else { throw ProxyError.configuration("Missing destination port") }
             if datagram && node.udp != true { throw ProxyError.unsupported("UDP is disabled for this server") }
-            let ss = ["ss", "shadowsocks"].contains(node.type.lowercased())
+            let kind = node.type.lowercased()
+            let ss = ["ss", "shadowsocks"].contains(kind)
             if ss {
                 guard let password = node.password, !password.isEmpty else {
                     throw ProxyError.configuration("Shadowsocks requires a non-empty password")
@@ -141,6 +155,9 @@ final class ProxyConnection {
                 }
                 shadowsocks = try ShadowsocksSession(password: password, destinationHost: host,
                                                       destinationPort: port, udp: datagram, cipher: method)
+            } else if kind == "trojan" {
+                trojan = try TrojanSession(password: node.password ?? "", destinationHost: host,
+                                           destinationPort: port, udp: datagram)
             } else {
                 vmess = try VMessSession(uuid: node.uuid!, alterId: node.alterId ?? 0,
                                          destinationHost: host, destinationPort: port, udp: datagram,
@@ -173,6 +190,7 @@ final class ProxyConnection {
         do {
             if let shadowsocks, !datagram { transport?.send(try shadowsocks.requestHeader()) }
             if let vmess { transport?.send(try vmess.requestHeader()) }
+            if let trojan { transport?.send(try trojan.requestHeader()) }
             ready = true
             timeout?.cancel(); timeout = nil
             let waiting = pending; pending.removeAll(); pendingBytes = 0
@@ -201,6 +219,8 @@ final class ProxyConnection {
             else { for chunk in try shadowsocks.encodeStream(data) { transport?.send(chunk) } }
         } else if let vmess {
             for chunk in try vmess.encodeBody(data) { transport?.send(chunk) }
+        } else if let trojan {
+            if datagram { transport?.send(try trojan.encodeDatagram(data)) } else { transport?.send(data) }
         }
     }
 
@@ -215,7 +235,8 @@ final class ProxyConnection {
         finishPending = false
         if let vmess { transport?.send(try vmess.finishWriting()) }
         // RFC6455 has no independent write EOF. VMess's encrypted termination
-        // packet closes that direction while the WebSocket remains available for replies.
+        // packet closes that direction while the WebSocket remains available for replies;
+        // Trojan over WebSocket has no such signal and keeps the write side open.
         if (node.network ?? "tcp").lowercased() != "ws" { transport?.finishWriting() }
     }
 
@@ -228,6 +249,9 @@ final class ProxyConnection {
             } else if let vmess {
                 for chunk in try vmess.decodeResponse(data) { onData?(chunk) }
                 if vmess.responseEnded { closeOnQueue() }
+            } else if let trojan {
+                if datagram { for packet in try trojan.decodeDatagrams(data) { onData?(packet) } }
+                else { onData?(data) }
             }
         } catch { fail(error) }
     }
@@ -237,6 +261,7 @@ final class ProxyConnection {
         do {
             if let shadowsocks, !datagram { try shadowsocks.finishReceiving() }
             if let vmess { try vmess.finishReceiving() }
+            if let trojan, datagram { try trojan.finishReceiving() }
             closeOnQueue()
         } catch { fail(error) }
     }
