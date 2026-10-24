@@ -12,6 +12,7 @@ enum InteropMain {
     private static let uuid = "b831381d-6324-4d53-ad4f-8cda48b30811"
 
     static func main() {
+        setvbuf(stdout, nil, _IOLBF, 0)   // stream results as they happen, not at exit
         func node(_ name: String, _ type: String, _ port: UInt16, cipher: String? = nil,
                   password: String? = nil, uuid: String? = nil, tls: Bool? = nil,
                   network: String? = nil, path: String? = nil) -> ProxyNode {

@@ -4,8 +4,9 @@
 # datagrams through each to a local echo server.
 #   XRAY=/path/to/xray            server binary (CI fetches a pinned, checksummed release)
 #   MOCKMINI_TRUST_CA=1           trust the generated test CA in the System keychain (sudo);
-#                                 its key is deleted once the leaf is signed, and the CA is
-#                                 removed from the keychain again on exit
+#                                 its key is deleted once the leaf is signed, and outside CI
+#                                 the CA is removed from the keychain again on exit (macOS
+#                                 asks for confirmation; CI runners are discarded instead)
 #   MOCKMINI_INTEROP_LONG_MB=N    also stream N MiB through VMess (crosses the nonce wrap)
 #   MOCKMINI_SERVERS_ONLY=1       start the servers and wait (for testing other clients)
 # The Swift client needs macOS 13+ (Network.framework, CryptoKit).
@@ -28,7 +29,8 @@ rm -f ca-key.pem   # nothing else may ever be signed by a CA this machine might 
 TRUSTED=0
 cleanup() {
   kill ${ECHO_PID:-} ${XRAY_PID:-} 2>/dev/null || true
-  if [[ $TRUSTED == 1 ]]; then
+  # remove-trusted-cert waits for an authorization dialog, which would hang a headless runner.
+  if [[ $TRUSTED == 1 && -z "${CI:-}" ]]; then
     sudo security remove-trusted-cert -d "$WORK/ca.pem" || true
     sudo security delete-certificate -c "MockMini Interop Test CA" /Library/Keychains/System.keychain || true
   fi
