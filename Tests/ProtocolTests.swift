@@ -16,6 +16,8 @@ enum ProtocolTests {
         try shadowsocksCipherFrames()
         try vmessFrames()
         try vmessChaChaFrames()
+        try vmessCounterWrap()
+        try byteQueue()
         try websocketFrames()
         try configurationValidation()
         try endpointResolver()
@@ -224,6 +226,55 @@ enum ProtocolTests {
             let aesReader = try vmessSession(alter)
             try fails("VMess AES session rejects ChaCha body") { _ = try aesReader.decodeResponse(vector) }
         }
+    }
+
+    /// The 16-bit body counter wraps after 65,536 chunks, as in v2ray/Xray; it must not end the stream.
+    private static func vmessCounterWrap() throws {
+        let writer = try vmessSession(0)
+        _ = try writer.requestHeader(timestamp: 1_700_000_000)
+        let first = try writer.encodeBody(Data("x".utf8))
+        for _ in 1..<65_536 { _ = try writer.encodeBody(Data("x".utf8)) }
+        try check(try writer.encodeBody(Data("x".utf8)) == first, "VMess request counter wraps to nonce zero")
+        _ = try writer.finishWriting()
+
+        let responseKey = Data(ProtocolCrypto.sha256(key).prefix(16))
+        let responseIV = Data(ProtocolCrypto.sha256(iv).prefix(16))
+        func chunk(_ plain: Data, _ counter: Int) throws -> Data {
+            let nonce = WireBytes.be16(UInt16(truncatingIfNeeded: counter)) + Data(responseIV.dropFirst(2).prefix(10))
+            let sealed = try ProtocolCrypto.seal(plain, key: responseKey, nonce: nonce)
+            return WireBytes.be16(UInt16(sealed.count)) + sealed
+        }
+        let vector = hex(aeadResponse)
+        try check(Data(vector.suffix(29)) == (try chunk(Data("hello VMess".utf8), 0)), "VMess response body chunk reproduces fixture")
+        let reader = try vmessSession(0)
+        try check(try reader.decodeResponse(Data(vector.dropLast(29))).isEmpty, "VMess response header alone yields no data")
+        let total = 65_538
+        var received = 0, batch = Data(), lastByte: UInt8 = 0
+        for counter in 0..<total {
+            batch.append(try chunk(Data([UInt8(truncatingIfNeeded: counter)]), counter))
+            if batch.count >= 64 * 1024 || counter == total - 1 {
+                for plain in try reader.decodeResponse(batch) { received += 1; lastByte = plain.last ?? 0 }
+                batch = Data()
+            }
+        }
+        try check(received == total && lastByte == UInt8(truncatingIfNeeded: total - 1), "VMess response counter wraps past 65,536 chunks")
+        _ = try reader.decodeResponse(try chunk(Data(), total))
+        try check(reader.responseEnded, "VMess wrapped-counter termination")
+        try reader.finishReceiving()
+    }
+
+    private static func byteQueue() throws {
+        var queue = ByteQueue(), reference = Data(), next: UInt8 = 0
+        for round in 0..<2_000 {
+            let appended = Data((0..<(round % 37 + 1)).map { _ in next &+= 1; return next })
+            queue.append(appended); reference.append(appended)
+            try check(queue.prefix(10) == Data(reference.prefix(10)), "ByteQueue prefix matches")
+            let length = round % 41
+            try check(queue.take(length) == Data(reference.prefix(length)), "ByteQueue take matches at round \(round)")
+            reference = Data(reference.dropFirst(length))
+            try check(queue.count == reference.count && queue.isEmpty == reference.isEmpty, "ByteQueue count matches")
+        }
+        try check(queue.take(queue.count) == reference && queue.isEmpty && queue.take(4).isEmpty, "ByteQueue drains")
     }
 
     private static func websocketFrames() throws {

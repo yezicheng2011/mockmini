@@ -337,7 +337,7 @@ enum WebSocketEvent {
 }
 
 struct WebSocketFrameDecoder {
-    private var buffer = Data()
+    private var buffer = ByteQueue()
     private var fragments: Data?
     private var ended = false
 
@@ -367,8 +367,8 @@ struct WebSocketFrameDecoder {
                 guard fin, length <= 125 else { throw ProxyError.malformed("Invalid WebSocket control frame") }
             }
             guard buffer.count >= header + Int(length) else { break }
-            let payload = Data(buffer.dropFirst(header).prefix(Int(length)))
-            buffer = Data(buffer.dropFirst(header + Int(length)))
+            _ = buffer.take(header)
+            let payload = buffer.take(Int(length))
             switch opcode {
             case 0:
                 guard fragments != nil else { throw ProxyError.malformed("Unexpected WebSocket continuation") }
