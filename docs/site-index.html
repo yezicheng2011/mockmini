@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="MockMini — original native VPN and packet stack for WLSAPlus on macOS. Apache License 2.0.">
+  <meta name="description" content="MockMini — a small, auditable proxy core in C and Swift. Shadowsocks AEAD, VMess, WebSocket, fuzzed packet engine. Apache License 2.0.">
   <meta name="theme-color" content="#f6f5f1">
-  <title>MockMini — native VPN stack</title>
+  <title>MockMini — small proxy core</title>
   <link rel="canonical" href="https://mockmini.danielye2011.uk/">
   <style>
     :root {
@@ -159,21 +159,20 @@
       <p class="eyebrow">Open-source VPN core</p>
       <h1>MockMini</h1>
       <p class="lede">
-        An original native VPN and packet stack for WLSAPlus on macOS —
+        A small, auditable proxy core in C and Swift —
         userspace IP forwarding, Shadowsocks AEAD, VMess, and WebSocket transport.
         Not derived from mihomo, Clash, sing-box, gVisor, or WireGuard. Under continuous open development.
       </p>
       <div class="actions">
         <a class="btn btn-primary" href="https://github.com/yezicheng2011/mockmini">View on GitHub</a>
-        <a class="btn btn-ghost" href="https://wlsaplus.spacehubxyz.hk/">WLSAPlus site</a>
       </div>
       <section class="card" aria-labelledby="what">
         <h2 id="what">What it is</h2>
         <p>
-          MockMini provides the network path used by the WLSAPlus macOS client:
-          a bounded packet engine with a macOS <code>utun</code> adapter, plus
-          protocol framing for common proxy transports. The macOS app vendors
-          this tree; this site is the public home for the library.
+          MockMini is a complete network path for proxy clients: a bounded,
+          fuzzed packet engine with a macOS <code>utun</code> adapter, plus
+          protocol framing for common proxy transports. About 2,500 lines,
+          Apache-2.0, ready to embed in open- or closed-source apps.
         </p>
       </section>
       <section class="card" aria-labelledby="ongoing">
@@ -181,8 +180,8 @@
         <p>
           MockMini is strengthened in ongoing passes: IPv4-first dial failover,
           clearer dial / WebSocket upgrade errors, Shadowsocks and VMess wire tests,
-          and an honest packet-engine limit surface. Improvements land in the
-          public GitHub tree first, then vendor into WLSAPlus for macOS.
+          a 1024-flow packet engine, and an honest limit surface. All work
+          happens in the public GitHub tree.
         </p>
       </section>
       <section class="card" aria-labelledby="limits">
@@ -214,10 +213,6 @@
         <div>
           <dt>License</dt>
           <dd>Apache-2.0</dd>
-        </div>
-        <div>
-          <dt>Used by</dt>
-          <dd>WLSAPlus</dd>
         </div>
       </dl>
     </div>

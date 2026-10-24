@@ -1,5 +1,5 @@
-// Standalone entry point for running ProtocolTests outside the macOS app.
-// The app repository calls ProtocolTests.run() from its own NativeTests.swift.
+// Standalone entry point for running ProtocolTests; embedding projects can call
+// ProtocolTests.run() from their own test runner instead.
 import Foundation
 
 @main

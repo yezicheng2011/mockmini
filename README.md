@@ -1,19 +1,48 @@
 # MockMini
 
-Original native VPN / packet core used by [WLSAPlus for macOS](https://github.com/yezicheng2011/wlsaplus-enablemacos).
+**A small, auditable proxy core in C and Swift.** Shadowsocks AEAD, VMess and
+WebSocket+TLS on top of a bounded userspace TCP/IP endpoint. About 2,500 lines,
+fuzzed, Apache-2.0.
 
 **Site:** https://mockmini.danielye2011.uk/  
 **License:** Apache License 2.0 (`LICENSE`, `NOTICE`) · credit **daniel.ye**
 
-This repository is **not** based on mihomo, Clash, sing-box, gVisor, or WireGuard.
-MockMini is under **continuous development**: dial reliability, protocol coverage, and
-packet-engine hardening land here first, then vendor into the macOS app.
+- **Small enough to review.** The whole core is about 2,500 lines of C and Swift.
+  No vendored proxy kernel, no third-party TCP/IP stack, no Go runtime. It is
+  **not** based on mihomo, Clash, sing-box, gVisor, or WireGuard.
+- **Tested hard.** A stateful, checksum-aware fuzzer (≈99% line coverage of the
+  packet engine) checks byte-exact in-order delivery on every run. libFuzzer
+  smoke tests and ASan/UBSan run in CI on Linux and macOS.
+- **Permissive license.** Apache-2.0: ship it in open- or closed-source apps.
+
+| | |
+|---|---|
+| Protocols | Shadowsocks AEAD (aes-128-gcm, aes-256-gcm, chacha20-ietf-poly1305), VMess (legacy + AEAD; AES-128-GCM / ChaCha20-Poly1305) |
+| Transports | TCP, TLS, WebSocket (RFC 6455) |
+| Packet engine | IPv4/IPv6 TCP + UDP, fragment reassembly, up to 1024 flows; portable C |
+| Platforms | macOS 13+ (Network.framework, CryptoKit); packet engine builds anywhere |
+
+```c
+#include "wlp.h"
+
+wlp_callbacks cb = { on_connect, on_data, on_close, on_packet, on_eof };
+wlp_engine *engine = wlp_new(cb, ctx);
+
+wlp_tick(engine, now_ms());                 // then at least every 100 ms
+wlp_input(engine, ip_packet, length);       // raw IP packet from your tun device
+// on_connect(flow, host, port, udp): dial upstream, then:
+wlp_remote_open(engine, flow);
+wlp_remote_data(engine, flow, bytes, n);    // upstream -> client
+```
+
+**Status:** young and actively developed. Known limits are listed honestly
+[below](#known-limits-honest). Bug reports and reviews are very welcome.
 
 | Path | Role |
 |------|------|
 | `Sources/Packet/` | Bounded userspace IP→proxy endpoint (`wlp`) + macOS `utun` adapter |
 | `Sources/VPN/` | Shadowsocks AEAD, VMess, WebSocket framing, Network.framework transport |
-| `Tests/packet_test.c` | Portable C engine tests |
+| `Tests/packet_test.c`, `Tests/packet_fuzz.c` | Portable C engine tests and stateful fuzzer |
 | `Tests/ProtocolTests.swift` | Crypto/wire fixtures (requires Apple CryptoKit / macOS SDK) |
 
 ## Dial behavior (SS / WS)
@@ -49,15 +78,17 @@ Protocol surface today: **Shadowsocks AEAD (aes-128-gcm, aes-256-gcm, chacha20-i
 TCP or WebSocket+TLS. Throughput and edge protocols are still behind mature Clash/mihomo
 kernels; that gap is expected while MockMini stays original and small.
 
-## How the macOS app consumes this
+## Embedding
 
-The app **vendors by copy** into `wlsaplus-enablemacos/native/Sources/{Packet,VPN}`
-(and matching tests). Keep secrets and subscription URLs out of this core.
+MockMini is the network core; your application supplies the rest:
 
-App-only glue that stays in the application repository:
+- the tunnel device and routes (`utun` on macOS), feeding raw IP packets to `wlp_input`;
+- one upstream connection per flow from `on_connect` (`ProxyConnection` in `Sources/VPN/`);
+- node configuration, subscriptions and UI.
 
-- `VPNHelper` / `VPNService` / UI / privileged helper lifecycle
-- Subscription URL handling and node catalog persistence
+Keep secrets and subscription URLs out of this core. Treat `wlp_remote_capacity() == 0`
+as "pause reads and retry after the next input or tick". Until a Swift package lands,
+add `Sources/Packet` and `Sources/VPN` to your target directly.
 
 ## Build / test
 
@@ -75,8 +106,13 @@ machine, reassembly, fragment cache and flow limit (≈99% line coverage of `wlp
 byte-exact in-order delivery plus well-formed output on every callback. CI runs it on Linux
 (gcc/clang), as a libFuzzer smoke, and on macOS together with the Swift protocol tests.
 
-Swift protocol tests and Network.framework transport require macOS 13+ SDKs
-(see the app’s `native/scripts/test.sh`).
+Swift protocol tests and Network.framework transport require macOS 13+ SDKs:
+
+```bash
+xcrun swiftc -swift-version 5 -parse-as-library \
+  Sources/VPN/*.swift Tests/ProtocolTests.swift Tests/ProtocolMain.swift -o .build/protocol-tests
+.build/protocol-tests
+```
 
 Do not add mihomo or other third-party proxy-core binaries to this tree.
 
