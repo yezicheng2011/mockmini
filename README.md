@@ -116,7 +116,15 @@ xcrun swiftc -swift-version 5 -parse-as-library \
 .build/protocol-tests
 ```
 
-Do not add mihomo or other third-party proxy-core binaries to this tree.
+Real-server interop (macOS): Xray serves every supported protocol on loopback and MockMini's
+client pushes verified TCP streams and UDP datagrams through each one.
+
+```bash
+XRAY=/path/to/xray MOCKMINI_TRUST_CA=1 bash scripts/run-interop.sh   # trusts a throwaway test CA (sudo)
+```
+
+Do not add mihomo, Xray or other third-party proxy-core binaries to this tree; interop fetches a
+pinned, checksum-verified Xray release at test time only.
 
 ## Provenance
 
