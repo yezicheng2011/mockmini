@@ -125,11 +125,11 @@ final class VMessSession {
     private let security: VMessSecurity
     private let requestBodyKey: Data
     private let responseBodyKey: Data
-    private var requestCount: UInt32 = 0
-    private var responseCount: UInt32 = 0
+    private var requestCount: UInt16 = 0
+    private var responseCount: UInt16 = 0
     private var headerSent = false
     private var requestEnded = false
-    private var incoming = Data()
+    private var incoming = ByteQueue()
     private var responseHeaderLength: Int?
     private var legacyResponseCipher: AESCFB128?
     private var legacyResponseHeader = Data()
@@ -214,7 +214,7 @@ final class VMessSession {
             let payload = Data(plain.dropFirst(position).prefix(count))
             let encrypted = try security.cipher.seal(payload, key: requestBodyKey,
                                                      nonce: bodyNonce(iv: requestIV, counter: requestCount))
-            requestCount += 1
+            requestCount &+= 1
             result.append(WireBytes.be16(UInt16(encrypted.count)) + encrypted)
             position += count
         }
@@ -225,7 +225,7 @@ final class VMessSession {
         guard headerSent, !requestEnded else { throw ProxyError.closed }
         let terminator = try security.cipher.seal(Data(), key: requestBodyKey,
                                                   nonce: bodyNonce(iv: requestIV, counter: requestCount))
-        requestCount += 1; requestEnded = true
+        requestCount &+= 1; requestEnded = true
         return WireBytes.be16(UInt16(terminator.count)) + terminator
     }
 
@@ -248,7 +248,7 @@ final class VMessSession {
             let packet = take(payloadLength!)
             let plain = try security.cipher.open(packet, key: responseBodyKey,
                                                  nonce: bodyNonce(iv: responseIV, counter: responseCount))
-            responseCount += 1; payloadLength = nil
+            responseCount &+= 1; payloadLength = nil
             if plain.isEmpty {
                 responseEnded = true
                 guard incoming.isEmpty else { throw ProxyError.malformed("Data after VMess termination") }
@@ -307,11 +307,12 @@ final class VMessSession {
         }
     }
 
-    private func bodyNonce(iv: Data, counter: UInt32) throws -> Data {
-        guard counter <= UInt16.max else { throw ProxyError.nonceExhausted }
-        return WireBytes.be16(UInt16(counter)) + Data(iv.dropFirst(2).prefix(10))
+    /// The wire counter is 16 bits and wraps, as in v2ray/Xray; refusing to wrap would end
+    /// every connection after 65,536 chunks (about 1 GiB) per direction.
+    private func bodyNonce(iv: Data, counter: UInt16) -> Data {
+        WireBytes.be16(counter) + Data(iv.dropFirst(2).prefix(10))
     }
     private func take(_ count: Int) -> Data {
-        let result = Data(incoming.prefix(count)); incoming = Data(incoming.dropFirst(count)); return result
+        incoming.take(count)
     }
 }

@@ -25,7 +25,11 @@ conformance suite, sustained throughput tests, or a security audit. Its retransm
 timer is conservative and does not estimate RTT. It does not implement ICMP, path MTU discovery, SACK, timestamps, ECN,
 urgent data, IPv6 jumbograms, or IPsec. It is a local proxy endpoint, not a
 production replacement for a mature general-purpose TCP stack. UDP datagrams
-are preserved. IP reassembly is bounded to sixteen partial datagrams (about
+are preserved. An engine holds up to 1024 flows (`WLP_FLOW_LIMIT`), found by
+seeded tuple and id hashes. TCP receive and send buffers are allocated on first
+use and freed after a second without use; at most 128 send queues
+(`WLP_TX_BUFFERS`, 32 MiB) are held at once, and `wlp_remote_capacity` reports 0
+to other flows until one is freed. IP reassembly is bounded to sixteen partial datagrams (about
 1.2 MiB) and fifteen seconds. Overlaps and inconsistent fragments reject the
 entire datagram until expiry. IPv6 atomic fragments bypass the cache; IPv6
 unfragmentable headers longer than 2048 bytes are rejected. An idle UDP flow expires

@@ -93,7 +93,7 @@ final class ShadowsocksSession {
     private var inboundKey: Data?
     private var inboundNonce = ShadowsocksNonce()
     private var saltRegistered = false
-    private var incoming = Data()
+    private var incoming = ByteQueue()
     private var payloadLength: Int?
     private var headerSent = false
 
@@ -194,9 +194,5 @@ final class ShadowsocksSession {
         return try ProxyAddress.stripSOCKS(plain)
     }
 
-    private func take(_ count: Int) -> Data {
-        let result = Data(incoming.prefix(count))
-        incoming = Data(incoming.dropFirst(count))
-        return result
-    }
+    private func take(_ count: Int) -> Data { incoming.take(count) }
 }

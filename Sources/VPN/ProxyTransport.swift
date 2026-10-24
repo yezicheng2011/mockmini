@@ -326,6 +326,33 @@ enum WireBytes {
     }
 }
 
+/// Receive buffer consumed from the front. Reads advance an offset instead of recopying the
+/// remainder; consumed bytes are reclaimed on append once they are at least half the storage,
+/// so total copying stays linear in the bytes received.
+struct ByteQueue {
+    private var storage = Data()
+    private var start = 0
+    var count: Int { storage.count - start }
+    var isEmpty: Bool { count == 0 }
+
+    mutating func append(_ data: Data) {
+        if start > 0, start >= storage.count / 2 {
+            storage = Data(storage.dropFirst(start)); start = 0
+        }
+        storage.append(data)
+    }
+    func prefix(_ length: Int) -> Data {
+        let from = storage.startIndex + start
+        return Data(storage[from..<(from + min(length, count))])
+    }
+    mutating func take(_ length: Int) -> Data {
+        let result = prefix(length)
+        start += result.count
+        if start == storage.count { storage.removeAll(keepingCapacity: true); start = 0 }
+        return result
+    }
+}
+
 /// Replay state is shared by associations using the same key, bounded to 16K salts.
 final class SaltReplayCache {
     static let shared = SaltReplayCache()
