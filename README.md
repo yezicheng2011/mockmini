@@ -4,7 +4,7 @@
 VLESS over TCP, TLS or WebSocket, on top of a bounded userspace TCP/IP endpoint.
 About 2,600 lines, fuzzed, Apache-2.0.
 
-**Site:** https://mockmini.danielye2011.uk/  
+**Site:** https://mockmini.com/  
 **License:** Apache License 2.0 (`LICENSE`, `NOTICE`) · credit **daniel.ye**  
 **Releases:** see [`CHANGELOG.md`](CHANGELOG.md) — current version **0.1.0**
 
