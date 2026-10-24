@@ -5,7 +5,8 @@ VLESS over TCP, TLS or WebSocket, on top of a bounded userspace TCP/IP endpoint.
 About 2,600 lines, fuzzed, Apache-2.0.
 
 **Site:** https://mockmini.danielye2011.uk/  
-**License:** Apache License 2.0 (`LICENSE`, `NOTICE`) · credit **daniel.ye**
+**License:** Apache License 2.0 (`LICENSE`, `NOTICE`) · credit **daniel.ye**  
+**Releases:** see [`CHANGELOG.md`](CHANGELOG.md) — current version **0.1.0**
 
 - **Small enough to review.** The whole core is about 2,600 lines of C and Swift.
   No vendored proxy kernel, no third-party TCP/IP stack, no Go runtime. It is
@@ -95,7 +96,7 @@ as "pause reads and retry after the next input or tick".
 Add MockMini with Swift Package Manager:
 
 ```swift
-.package(url: "https://github.com/yezicheng2011/mockmini.git", branch: "main")
+.package(url: "https://github.com/yezicheng2011/mockmini.git", from: "0.1.0")
 // products: "MockMiniPacket" (C packet engine), "MockMiniVPN" (protocols and transports)
 ```
 
