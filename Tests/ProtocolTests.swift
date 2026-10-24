@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(MockMiniVPN)   // SwiftPM builds the library as its own module
+@testable import MockMiniVPN
+#endif
 
 // The password, UUID, keys and addresses here are public examples, never live credentials.
 // CFB fixtures: NIST SP 800-38A F.3.13 (CFB128-AES128).
@@ -14,14 +17,20 @@ enum ProtocolTests {
         try primitiveVectors()
         try shadowsocksFrames()
         try shadowsocksCipherFrames()
+        #if canImport(CommonCrypto)
+        try vmessPrimitives()
         try vmessFrames()
         try vmessChaChaFrames()
         try vmessCounterWrap()
         try trojanFrames()
+        #endif
         try byteQueue()
         try websocketFrames()
         try configurationValidation()
+        try transportPlans()
+        #if canImport(Network)
         try endpointResolver()
+        #endif
     }
     private static func check(_ condition: Bool, _ message: String) throws {
         if !condition { throw Failure(description: message) }
@@ -48,21 +57,6 @@ enum ProtocolTests {
         try check(ShadowsocksKeys.master(password: "password") == hex("5f4dcc3b5aa765d61d8327deb882cf992b95990a9151374abd8ff8c5a7a0fe08"), "SS EVP_BytesToKey MD5")
         let subkey = ShadowsocksKeys.subkey(master: ShadowsocksKeys.master(password: "password"), salt: Data((0..<32).map(UInt8.init)))
         try check(subkey == hex("ee187aed3f87574907a39db98606f60a526114831288097cac66054b33a9464f"), "SS HKDF-SHA1")
-        let kdf = VMessCrypto.kdf(iv, [Data("test path".utf8), Data("second".utf8)])
-        try check(kdf == hex("9cb322b8eeb3fb387601a64e09fe065f09367d37926acd6f744f3f73a4001867"), "VMess nested HMAC KDF")
-        try check(VMessCrypto.crc32(Data("123456789".utf8)) == 0xcbf43926, "IEEE CRC32")
-        try check(VMessCrypto.fnv1a(Data("hello".utf8)) == 0x4f9f2cab, "FNV1a")
-        let aesKey = hex("2b7e151628aed2a6abf7158809cf4f3c")
-        let clear = hex("6bc1bee22e409f96e93d7e117393172aae2d8a571e03ac9c9eb76fac45af8e5130c81c46a35ce411e5fbc1191a0a52eff69f2445df4f9b17ad2b417be66c3710")
-        let encrypted = hex("3b3fd92eb72dad20333449f8e83cfb4ac8a64537a0b3a93fcde3cdad9f1ce58b26751f67a3cbb140b1808cf187a4f4dfc04b05357c5d1c0eeac4c66f9ff7f2e6")
-        let encoder = try AESCFB128(key: aesKey, iv: iv, decrypt: false)
-        var encoded = Data()
-        for byte in clear { encoded.append(try encoder.update(Data([byte]))) }
-        try check(encoded == encrypted, "NIST AES-CFB128 encryption over partial blocks")
-        let decoder = try AESCFB128(key: aesKey, iv: iv, decrypt: true)
-        var decoded = Data()
-        for byte in encrypted { decoded.append(try decoder.update(Data([byte]))) }
-        try check(decoded == clear, "NIST AES-CFB128 decryption over partial blocks")
         var counter = ShadowsocksNonce()
         try check(try counter.next() == Data(repeating: 0, count: 12), "SS starts at nonce zero")
         try check(try counter.next() == Data([1]) + Data(repeating: 0, count: 11), "SS uses little-endian nonce increments")
@@ -151,6 +145,24 @@ enum ProtocolTests {
         }
     }
 
+    #if canImport(CommonCrypto)   // VMess and Trojan use CommonCrypto primitives
+    private static func vmessPrimitives() throws {
+        let kdf = VMessCrypto.kdf(iv, [Data("test path".utf8), Data("second".utf8)])
+        try check(kdf == hex("9cb322b8eeb3fb387601a64e09fe065f09367d37926acd6f744f3f73a4001867"), "VMess nested HMAC KDF")
+        try check(VMessCrypto.crc32(Data("123456789".utf8)) == 0xcbf43926, "IEEE CRC32")
+        try check(VMessCrypto.fnv1a(Data("hello".utf8)) == 0x4f9f2cab, "FNV1a")
+        let aesKey = hex("2b7e151628aed2a6abf7158809cf4f3c")
+        let clear = hex("6bc1bee22e409f96e93d7e117393172aae2d8a571e03ac9c9eb76fac45af8e5130c81c46a35ce411e5fbc1191a0a52eff69f2445df4f9b17ad2b417be66c3710")
+        let encrypted = hex("3b3fd92eb72dad20333449f8e83cfb4ac8a64537a0b3a93fcde3cdad9f1ce58b26751f67a3cbb140b1808cf187a4f4dfc04b05357c5d1c0eeac4c66f9ff7f2e6")
+        let encoder = try AESCFB128(key: aesKey, iv: iv, decrypt: false)
+        var encoded = Data()
+        for byte in clear { encoded.append(try encoder.update(Data([byte]))) }
+        try check(encoded == encrypted, "NIST AES-CFB128 encryption over partial blocks")
+        let decoder = try AESCFB128(key: aesKey, iv: iv, decrypt: true)
+        var decoded = Data()
+        for byte in encrypted { decoded.append(try decoder.update(Data([byte]))) }
+        try check(decoded == clear, "NIST AES-CFB128 decryption over partial blocks")
+    }
     private static func vmessSession(_ alter: Int, udp: Bool = false) throws -> VMessSession {
         try VMessSession(uuid: user, alterId: alter, destinationHost: "example.com", destinationPort: 443,
                           udp: udp, requestIV: iv, requestKey: key, responseAuth: 0x42)
@@ -307,6 +319,8 @@ enum ProtocolTests {
         try fails("Trojan TCP session rejects datagram decoding") { _ = try stream.decodeDatagrams(vector) }
     }
 
+    #endif
+
     private static func byteQueue() throws {
         var queue = ByteQueue(), reference = Data(), next: UInt8 = 0
         for round in 0..<2_000 {
@@ -413,6 +427,34 @@ enum ProtocolTests {
         try check(ProxyError.dial("x").errorDescription == "x", "dial error surfaces message")
     }
 
+    private static func transportPlans() throws {
+        let ss = ProxyNode(id: "ss", name: "SS", type: "ss", server: "example.com", port: 8388,
+                           cipher: "aes-256-gcm", password: "secret", udp: true)
+        try check(try TransportPlan.make(for: ss, datagramSocket: false) == TransportPlan(dial: .tcp, security: .none, framing: .raw), "SS TCP plan")
+        try check(try TransportPlan.make(for: ss, datagramSocket: true) == TransportPlan(dial: .udp, security: .none, framing: .raw), "SS UDP plan")
+        try check(try TransportPlan.make(for: ss, datagramSocket: false).framingCarriesEOF, "raw framing carries EOF")
+        var vmess = ProxyNode(id: "v", name: "V", type: "vmess", server: "192.0.2.7", port: 8443, uuid: user,
+                              tls: true, network: "ws", wsPath: "/ray")
+        let ws = try TransportPlan.make(for: vmess, datagramSocket: false)
+        try check(ws == TransportPlan(dial: .tcp, security: .systemTLS(serverName: "192.0.2.7"),
+                                      framing: .webSocket(path: "/ray", host: "192.0.2.7:8443")), "VMess WS+TLS plan defaults")
+        try check(!ws.framingCarriesEOF, "WebSocket framing cannot carry EOF")
+        vmess.serverName = "cdn.example"; vmess.wsHost = "front.example"; vmess.wsPath = nil
+        try check(try TransportPlan.make(for: vmess, datagramSocket: false) == TransportPlan(dial: .tcp, security: .systemTLS(serverName: "cdn.example"),
+                                      framing: .webSocket(path: "/", host: "front.example")), "VMess SNI, Host and default path")
+        vmess.server = "2001:db8::7"; vmess.wsHost = nil
+        try check(try TransportPlan.make(for: vmess, datagramSocket: false).framing == .webSocket(path: "/", host: "[2001:db8::7]:8443"), "IPv6 Host literal")
+        let trojan = ProxyNode(id: "t", name: "T", type: "trojan", server: "example.com", port: 443, password: "secret")
+        try check(try TransportPlan.make(for: trojan, datagramSocket: false).security == .systemTLS(serverName: "example.com"), "Trojan implies system TLS")
+        vmess.serverName = "bad name"
+        try fails("TLS server name with a space") { _ = try TransportPlan.make(for: vmess, datagramSocket: false) }
+        vmess.serverName = nil; vmess.wsPath = "ray"
+        try fails("WebSocket path without leading slash") { _ = try TransportPlan.make(for: vmess, datagramSocket: false) }
+        vmess.wsPath = "/ray"; vmess.skipCertVerify = true
+        try fails("Plan refuses insecure TLS") { _ = try TransportPlan.make(for: vmess, datagramSocket: false) }
+    }
+
+    #if canImport(Network)
     private static func endpointResolver() throws {
         try check(ProxyEndpointResolver.literalAddress("192.0.2.10") == "192.0.2.10", "IPv4 literal")
         try check(ProxyEndpointResolver.literalAddress("2001:db8::1") == "2001:db8::1", "IPv6 literal")
@@ -425,4 +467,5 @@ enum ProtocolTests {
             try check(both.count <= 8, "resolver caps address fan-out at 8")
         }
     }
+    #endif
 }

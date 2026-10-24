@@ -1,3 +1,4 @@
+#if canImport(CommonCrypto)   // SHA-224 for the Trojan token
 import Foundation
 import CommonCrypto
 
@@ -86,3 +87,14 @@ final class TrojanSession {
         guard incoming.isEmpty else { throw ProxyError.malformed("The Trojan stream ended within a UDP packet") }
     }
 }
+
+extension TrojanSession: ProxySession {
+    var usesDatagramSocket: Bool { false }
+    func openingBytes() throws -> Data? { try requestHeader() }
+    func encode(_ payload: Data) throws -> [Data] { udp ? [try encodeDatagram(payload)] : [payload] }
+    func decode(_ received: Data) throws -> [Data] { udp ? try decodeDatagrams(received) : [received] }
+    func closingBytes() throws -> Data? { nil }
+    func transportEnded() throws { if udp { try finishReceiving() } }
+    var remoteEnded: Bool { false }
+}
+#endif

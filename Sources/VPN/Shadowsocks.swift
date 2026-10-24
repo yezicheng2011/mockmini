@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 
 // Original implementation from the public SIP004/SIP007 wire description:
 // https://shadowsocks.org/doc/aead.html
@@ -195,4 +199,14 @@ final class ShadowsocksSession {
     }
 
     private func take(_ count: Int) -> Data { incoming.take(count) }
+}
+
+extension ShadowsocksSession: ProxySession {
+    var usesDatagramSocket: Bool { true }
+    func openingBytes() throws -> Data? { udp ? nil : try requestHeader() }
+    func encode(_ payload: Data) throws -> [Data] { udp ? [try encodeDatagram(payload)] : try encodeStream(payload) }
+    func decode(_ received: Data) throws -> [Data] { udp ? [try decodeDatagram(received)] : try decodeStream(received) }
+    func closingBytes() throws -> Data? { nil }
+    func transportEnded() throws { if !udp { try finishReceiving() } }
+    var remoteEnded: Bool { false }
 }

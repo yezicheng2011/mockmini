@@ -89,8 +89,26 @@ MockMini is the network core; your application supplies the rest:
 - node configuration, subscriptions and UI.
 
 Keep secrets and subscription URLs out of this core. Treat `wlp_remote_capacity() == 0`
-as "pause reads and retry after the next input or tick". Until a Swift package lands,
-add `Sources/Packet` and `Sources/VPN` to your target directly.
+as "pause reads and retry after the next input or tick".
+
+Add MockMini with Swift Package Manager:
+
+```swift
+.package(url: "https://github.com/yezicheng2011/mockmini.git", branch: "main")
+// products: "MockMiniPacket" (C packet engine), "MockMiniVPN" (protocols and transports)
+```
+
+Each connection is a stack of independent layers (`Sources/VPN/Layers.swift`):
+
+| Layer | Today | Interface |
+|-------|-------|-----------|
+| Protocol | Shadowsocks, VMess, Trojan | `ProxySession` |
+| Framing | raw, WebSocket | `TransportPlan.Framing` |
+| Security | none, system TLS | `TransportPlan.Security` |
+| Dial | TCP, UDP | `TransportPlan.Dial` |
+
+A new protocol is a new `ProxySession`; a new transport is a new plan case. The portable core
+(model, plans, Shadowsocks, WebSocket framing) also builds on Linux with swift-crypto.
 
 ## Build / test
 
@@ -108,7 +126,9 @@ machine, reassembly, fragment cache and flow limit (≈99% line coverage of `wlp
 byte-exact in-order delivery plus well-formed output on every callback. CI runs it on Linux
 (gcc/clang), as a libFuzzer smoke, and on macOS together with the Swift protocol tests.
 
-Swift protocol tests and Network.framework transport require macOS 13+ SDKs:
+Swift protocol tests: the full suite needs macOS 13+ SDKs; the portable subset runs anywhere
+with `swift build --product mockmini-protocol-tests && .build/debug/mockmini-protocol-tests`.
+Without SwiftPM on macOS:
 
 ```bash
 xcrun swiftc -swift-version 5 -parse-as-library \
