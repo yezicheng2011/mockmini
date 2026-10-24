@@ -1,4 +1,29 @@
 import Foundation
+
+/// VMess body security. "auto" keeps AES-128-GCM, matching common clients on hardware with AES.
+public enum VMessSecurity: UInt8 {
+    case aes128gcm = 0x03
+    case chacha20poly1305 = 0x04
+
+    /// Accepts the common subscription spellings (case-insensitive); nil means "auto".
+    public init?(name: String?) {
+        switch (name ?? "auto").lowercased().trimmingCharacters(in: .whitespaces) {
+        case "", "auto", "aes-128-gcm": self = .aes128gcm
+        case "chacha20-poly1305", "chacha20-ietf-poly1305": self = .chacha20poly1305
+        default: return nil
+        }
+    }
+    var cipher: ShadowsocksCipher { self == .aes128gcm ? .aes128gcm : .chacha20poly1305 }
+    /// ChaCha20-Poly1305 expands the 16-byte body key to MD5(key) || MD5(MD5(key)).
+    func bodyKey(_ key: Data) -> Data {
+        guard self == .chacha20poly1305 else { return key }
+        let first = ProtocolCrypto.md5(key)
+        return first + ProtocolCrypto.md5(first)
+    }
+}
+
+#if canImport(CommonCrypto)   // AES-ECB block for VMess legacy/AEAD auth
+import Foundation
 import CryptoKit
 import CommonCrypto
 
@@ -62,28 +87,6 @@ enum VMessCrypto {
         guard let uuid = UUID(uuidString: string) else { throw ProxyError.configuration("Invalid VMess UUID") }
         var value = uuid.uuid
         return withUnsafeBytes(of: &value) { Data($0) }
-    }
-}
-
-/// VMess body security. "auto" keeps AES-128-GCM, matching common clients on hardware with AES.
-public enum VMessSecurity: UInt8 {
-    case aes128gcm = 0x03
-    case chacha20poly1305 = 0x04
-
-    /// Accepts the common subscription spellings (case-insensitive); nil means "auto".
-    public init?(name: String?) {
-        switch (name ?? "auto").lowercased().trimmingCharacters(in: .whitespaces) {
-        case "", "auto", "aes-128-gcm": self = .aes128gcm
-        case "chacha20-poly1305", "chacha20-ietf-poly1305": self = .chacha20poly1305
-        default: return nil
-        }
-    }
-    var cipher: ShadowsocksCipher { self == .aes128gcm ? .aes128gcm : .chacha20poly1305 }
-    /// ChaCha20-Poly1305 expands the 16-byte body key to MD5(key) || MD5(MD5(key)).
-    func bodyKey(_ key: Data) -> Data {
-        guard self == .chacha20poly1305 else { return key }
-        let first = ProtocolCrypto.md5(key)
-        return first + ProtocolCrypto.md5(first)
     }
 }
 
@@ -316,3 +319,14 @@ final class VMessSession {
         incoming.take(count)
     }
 }
+
+extension VMessSession: ProxySession {
+    var usesDatagramSocket: Bool { false }
+    func openingBytes() throws -> Data? { try requestHeader() }
+    func encode(_ payload: Data) throws -> [Data] { try encodeBody(payload) }
+    func decode(_ received: Data) throws -> [Data] { try decodeResponse(received) }
+    func closingBytes() throws -> Data? { try finishWriting() }
+    func transportEnded() throws { try finishReceiving() }
+    var remoteEnded: Bool { responseEnded }
+}
+#endif

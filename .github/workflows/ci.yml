@@ -42,6 +42,17 @@ jobs:
           clang -std=c11 -g -O1 -DMOCKMINI_LIBFUZZER -fsanitize=fuzzer,address,undefined \
             -fno-sanitize-recover=all Sources/Packet/wlp.c Tests/packet_fuzz.c -o .build/packet-libfuzzer
           .build/packet-libfuzzer -max_total_time=60 -max_len=65536 -print_final_stats=1 .build/corpus
+  swift-linux:
+    name: Swift package (Linux, portable core)
+    runs-on: ubuntu-latest
+    container: swift:5.10-noble
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build package and run portable protocol tests (swift-crypto)
+        run: |
+          swift build --product mockmini-protocol-tests
+          .build/debug/mockmini-protocol-tests
   macos:
     name: macOS (packet engine + Swift protocol tests)
     runs-on: macos-14
@@ -59,3 +70,27 @@ jobs:
             Sources/VPN/*.swift Tests/ProtocolTests.swift Tests/ProtocolMain.swift \
             -o .build/protocol-tests
           .build/protocol-tests
+      - name: Swift package (full macOS build + protocol tests)
+        run: |
+          swift build --product mockmini-protocol-tests
+          .build/debug/mockmini-protocol-tests
+  interop:
+    name: Interop (macOS, real Xray servers)
+    runs-on: macos-14
+    timeout-minutes: 20
+    env:
+      # Test-only server binary; never vendored. Digest from the release's .dgst file.
+      XRAY_VERSION: v1.8.24
+      XRAY_SHA256: bb033a6e094a6cbb2f6e2c9a8b8c370678e3b9035e4e5bd42cbf44b06f0bc91a
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned Xray (checksum-verified)
+        run: |
+          curl -fsSL -o xray.zip "https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-macos-arm64-v8a.zip"
+          echo "${XRAY_SHA256}  xray.zip" | shasum -a 256 -c -
+          mkdir -p .build/xray && unzip -q xray.zip -d .build/xray
+      - name: Shadowsocks / VMess / Trojan against Xray, TCP + UDP, VMess past the nonce wrap
+        env:
+          MOCKMINI_TRUST_CA: '1'
+          MOCKMINI_INTEROP_LONG_MB: '1280'
+        run: XRAY="$PWD/.build/xray/xray" bash scripts/run-interop.sh

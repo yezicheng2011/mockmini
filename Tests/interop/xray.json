@@ -1,0 +1,208 @@
+{
+  "log": {
+    "loglevel": "warning"
+  },
+  "inbounds": [
+    {
+      "tag": "ss-aes-256",
+      "listen": "127.0.0.1",
+      "port": 10388,
+      "protocol": "shadowsocks",
+      "settings": {
+        "method": "aes-256-gcm",
+        "password": "mockmini-ss",
+        "network": "tcp,udp"
+      }
+    },
+    {
+      "tag": "ss-chacha",
+      "listen": "127.0.0.1",
+      "port": 10389,
+      "protocol": "shadowsocks",
+      "settings": {
+        "method": "chacha20-ietf-poly1305",
+        "password": "mockmini-ss",
+        "network": "tcp,udp"
+      }
+    },
+    {
+      "tag": "ss-aes-128",
+      "listen": "127.0.0.1",
+      "port": 10390,
+      "protocol": "shadowsocks",
+      "settings": {
+        "method": "aes-128-gcm",
+        "password": "mockmini-ss",
+        "network": "tcp,udp"
+      }
+    },
+    {
+      "tag": "vmess",
+      "listen": "127.0.0.1",
+      "port": 10086,
+      "protocol": "vmess",
+      "settings": {
+        "clients": [
+          {
+            "id": "b831381d-6324-4d53-ad4f-8cda48b30811"
+          }
+        ]
+      }
+    },
+    {
+      "tag": "vmess-ws-tls",
+      "listen": "127.0.0.1",
+      "port": 10087,
+      "protocol": "vmess",
+      "settings": {
+        "clients": [
+          {
+            "id": "b831381d-6324-4d53-ad4f-8cda48b30811"
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "ws",
+        "wsSettings": {
+          "path": "/vmess"
+        },
+        "security": "tls",
+        "tlsSettings": {
+          "certificates": [
+            {
+              "certificateFile": "cert.pem",
+              "keyFile": "key.pem"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tag": "trojan-tls",
+      "listen": "127.0.0.1",
+      "port": 10443,
+      "protocol": "trojan",
+      "settings": {
+        "clients": [
+          {
+            "password": "mockmini-trojan"
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "tls",
+        "tlsSettings": {
+          "certificates": [
+            {
+              "certificateFile": "cert.pem",
+              "keyFile": "key.pem"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tag": "trojan-ws-tls",
+      "listen": "127.0.0.1",
+      "port": 10444,
+      "protocol": "trojan",
+      "settings": {
+        "clients": [
+          {
+            "password": "mockmini-trojan"
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "ws",
+        "wsSettings": {
+          "path": "/trojan"
+        },
+        "security": "tls",
+        "tlsSettings": {
+          "certificates": [
+            {
+              "certificateFile": "cert.pem",
+              "keyFile": "key.pem"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tag": "vless",
+      "listen": "127.0.0.1",
+      "port": 10500,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "b831381d-6324-4d53-ad4f-8cda48b30811"
+          }
+        ],
+        "decryption": "none"
+      }
+    },
+    {
+      "tag": "vless-tls",
+      "listen": "127.0.0.1",
+      "port": 10501,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "b831381d-6324-4d53-ad4f-8cda48b30811"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "tls",
+        "tlsSettings": {
+          "certificates": [
+            {
+              "certificateFile": "cert.pem",
+              "keyFile": "key.pem"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tag": "vless-ws-tls",
+      "listen": "127.0.0.1",
+      "port": 10502,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "b831381d-6324-4d53-ad4f-8cda48b30811"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "ws",
+        "wsSettings": {
+          "path": "/vless"
+        },
+        "security": "tls",
+        "tlsSettings": {
+          "certificates": [
+            {
+              "certificateFile": "cert.pem",
+              "keyFile": "key.pem"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom"
+    }
+  ]
+}

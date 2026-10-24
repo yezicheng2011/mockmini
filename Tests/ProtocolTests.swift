@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(MockMiniVPN)   // SwiftPM builds the library as its own module
+@testable import MockMiniVPN
+#endif
 
 // The password, UUID, keys and addresses here are public examples, never live credentials.
 // CFB fixtures: NIST SP 800-38A F.3.13 (CFB128-AES128).
@@ -14,13 +17,21 @@ enum ProtocolTests {
         try primitiveVectors()
         try shadowsocksFrames()
         try shadowsocksCipherFrames()
+        #if canImport(CommonCrypto)
+        try vmessPrimitives()
         try vmessFrames()
         try vmessChaChaFrames()
         try vmessCounterWrap()
+        try trojanFrames()
+        #endif
+        try vlessFrames()
         try byteQueue()
         try websocketFrames()
         try configurationValidation()
+        try transportPlans()
+        #if canImport(Network)
         try endpointResolver()
+        #endif
     }
     private static func check(_ condition: Bool, _ message: String) throws {
         if !condition { throw Failure(description: message) }
@@ -47,21 +58,6 @@ enum ProtocolTests {
         try check(ShadowsocksKeys.master(password: "password") == hex("5f4dcc3b5aa765d61d8327deb882cf992b95990a9151374abd8ff8c5a7a0fe08"), "SS EVP_BytesToKey MD5")
         let subkey = ShadowsocksKeys.subkey(master: ShadowsocksKeys.master(password: "password"), salt: Data((0..<32).map(UInt8.init)))
         try check(subkey == hex("ee187aed3f87574907a39db98606f60a526114831288097cac66054b33a9464f"), "SS HKDF-SHA1")
-        let kdf = VMessCrypto.kdf(iv, [Data("test path".utf8), Data("second".utf8)])
-        try check(kdf == hex("9cb322b8eeb3fb387601a64e09fe065f09367d37926acd6f744f3f73a4001867"), "VMess nested HMAC KDF")
-        try check(VMessCrypto.crc32(Data("123456789".utf8)) == 0xcbf43926, "IEEE CRC32")
-        try check(VMessCrypto.fnv1a(Data("hello".utf8)) == 0x4f9f2cab, "FNV1a")
-        let aesKey = hex("2b7e151628aed2a6abf7158809cf4f3c")
-        let clear = hex("6bc1bee22e409f96e93d7e117393172aae2d8a571e03ac9c9eb76fac45af8e5130c81c46a35ce411e5fbc1191a0a52eff69f2445df4f9b17ad2b417be66c3710")
-        let encrypted = hex("3b3fd92eb72dad20333449f8e83cfb4ac8a64537a0b3a93fcde3cdad9f1ce58b26751f67a3cbb140b1808cf187a4f4dfc04b05357c5d1c0eeac4c66f9ff7f2e6")
-        let encoder = try AESCFB128(key: aesKey, iv: iv, decrypt: false)
-        var encoded = Data()
-        for byte in clear { encoded.append(try encoder.update(Data([byte]))) }
-        try check(encoded == encrypted, "NIST AES-CFB128 encryption over partial blocks")
-        let decoder = try AESCFB128(key: aesKey, iv: iv, decrypt: true)
-        var decoded = Data()
-        for byte in encrypted { decoded.append(try decoder.update(Data([byte]))) }
-        try check(decoded == clear, "NIST AES-CFB128 decryption over partial blocks")
         var counter = ShadowsocksNonce()
         try check(try counter.next() == Data(repeating: 0, count: 12), "SS starts at nonce zero")
         try check(try counter.next() == Data([1]) + Data(repeating: 0, count: 11), "SS uses little-endian nonce increments")
@@ -150,6 +146,24 @@ enum ProtocolTests {
         }
     }
 
+    #if canImport(CommonCrypto)   // VMess and Trojan use CommonCrypto primitives
+    private static func vmessPrimitives() throws {
+        let kdf = VMessCrypto.kdf(iv, [Data("test path".utf8), Data("second".utf8)])
+        try check(kdf == hex("9cb322b8eeb3fb387601a64e09fe065f09367d37926acd6f744f3f73a4001867"), "VMess nested HMAC KDF")
+        try check(VMessCrypto.crc32(Data("123456789".utf8)) == 0xcbf43926, "IEEE CRC32")
+        try check(VMessCrypto.fnv1a(Data("hello".utf8)) == 0x4f9f2cab, "FNV1a")
+        let aesKey = hex("2b7e151628aed2a6abf7158809cf4f3c")
+        let clear = hex("6bc1bee22e409f96e93d7e117393172aae2d8a571e03ac9c9eb76fac45af8e5130c81c46a35ce411e5fbc1191a0a52eff69f2445df4f9b17ad2b417be66c3710")
+        let encrypted = hex("3b3fd92eb72dad20333449f8e83cfb4ac8a64537a0b3a93fcde3cdad9f1ce58b26751f67a3cbb140b1808cf187a4f4dfc04b05357c5d1c0eeac4c66f9ff7f2e6")
+        let encoder = try AESCFB128(key: aesKey, iv: iv, decrypt: false)
+        var encoded = Data()
+        for byte in clear { encoded.append(try encoder.update(Data([byte]))) }
+        try check(encoded == encrypted, "NIST AES-CFB128 encryption over partial blocks")
+        let decoder = try AESCFB128(key: aesKey, iv: iv, decrypt: true)
+        var decoded = Data()
+        for byte in encrypted { decoded.append(try decoder.update(Data([byte]))) }
+        try check(decoded == clear, "NIST AES-CFB128 decryption over partial blocks")
+    }
     private static func vmessSession(_ alter: Int, udp: Bool = false) throws -> VMessSession {
         try VMessSession(uuid: user, alterId: alter, destinationHost: "example.com", destinationPort: 443,
                           udp: udp, requestIV: iv, requestKey: key, responseAuth: 0x42)
@@ -263,6 +277,107 @@ enum ProtocolTests {
         try reader.finishReceiving()
     }
 
+    // Trojan fixtures computed with Python hashlib from the public protocol description.
+    private static let trojanConnect = "64363364633931396532303164376263346338323536333064326366323566646339336434623266306434363730366432393033386430310d0a01030b6578616d706c652e636f6d01bb0d0a"
+    private static let trojanAssociate = "64363364633931396532303164376263346338323536333064326366323566646339336434623266306434363730366432393033386430310d0a0301c000020100350d0a"
+    private static let trojanServerDatagrams = "01c0000201003500030d0a6f6e65030b646e732e6578616d706c65003500000d0a0420010db8000000000000000000000001003500030d0a74776f"
+    private static func trojanFrames() throws {
+        try check(TrojanSession.token("password") == Data("d63dc919e201d7bc4c825630d2cf25fdc93d4b2f0d46706d29038d01".utf8), "Trojan SHA-224 hex token")
+        try check(TrojanSession.token("pässwörd") == Data("1fa1dc9715a45491364693be5cfc25e1e8478204b8b4ef6deee9d3b3".utf8), "Trojan token hashes UTF-8")
+        let stream = try TrojanSession(password: "password", destinationHost: "example.com", destinationPort: 443, udp: false)
+        try check(try stream.requestHeader() == hex(trojanConnect), "Trojan CONNECT request wire fixture")
+        try fails("Trojan header sent twice") { _ = try stream.requestHeader() }
+        try fails("Trojan TCP session has no datagram framing") { _ = try stream.encodeDatagram(Data([1])) }
+        try fails("Trojan empty password") {
+            _ = try TrojanSession(password: "", destinationHost: "example.com", destinationPort: 443, udp: false)
+        }
+
+        let datagrams = try TrojanSession(password: "password", destinationHost: "192.0.2.1", destinationPort: 53, udp: true)
+        try fails("Trojan datagram before request") { _ = try datagrams.encodeDatagram(Data("hello".utf8)) }
+        try check(try datagrams.requestHeader() == hex(trojanAssociate), "Trojan UDP ASSOCIATE request wire fixture")
+        try check(try datagrams.encodeDatagram(Data("hello".utf8)) == hex("01c0000201003500050d0a68656c6c6f"), "Trojan UDP packet wire fixture")
+        try check(try datagrams.encodeDatagram(Data()).count == 11, "Trojan carries empty UDP datagrams")
+        try fails("Trojan oversized UDP datagram") { _ = try datagrams.encodeDatagram(Data(count: TrojanSession.maxDatagram + 1)) }
+
+        let vector = hex(trojanServerDatagrams)
+        let expected = [Data("one".utf8), Data(), Data("two".utf8)]
+        var whole = try TrojanSession(password: "password", destinationHost: "192.0.2.1", destinationPort: 53, udp: true)
+        try check(try whole.decodeDatagrams(vector) == expected, "Trojan IPv4, domain and IPv6 source datagrams")
+        try whole.finishReceiving()
+        whole = try TrojanSession(password: "password", destinationHost: "192.0.2.1", destinationPort: 53, udp: true)
+        var split = [Data]()
+        for byte in vector { split += try whole.decodeDatagrams(Data([byte])) }
+        try check(split == expected, "Trojan UDP stream split at every byte")
+        try whole.finishReceiving()
+
+        let truncated = try TrojanSession(password: "password", destinationHost: "192.0.2.1", destinationPort: 53, udp: true)
+        try check(try truncated.decodeDatagrams(Data(vector.prefix(16))) == [Data("one".utf8)], "Trojan delivers complete datagrams before a partial one")
+        try fails("Trojan stream ends inside a datagram") { try truncated.finishReceiving() }
+        for bad in ["05c0000201003500030d0a6f6e65", "01c0000201003500030a0d6f6e65", "030000350000"] {
+            let session = try TrojanSession(password: "password", destinationHost: "192.0.2.1", destinationPort: 53, udp: true)
+            try fails("Trojan malformed UDP framing \(bad)") { _ = try session.decodeDatagrams(hex(bad)) }
+        }
+        try fails("Trojan TCP session rejects datagram decoding") { _ = try stream.decodeDatagrams(vector) }
+    }
+
+    #endif
+
+    // VLESS fixtures computed with Python from the public protocol description.
+    private static func vlessFrames() throws {
+        let stream = try VLESSSession(uuid: user, destinationHost: "example.com", destinationPort: 443, udp: false)
+        try check(try stream.requestHeader() == hex("00de305d5475b4431badb2eb6b9e546014000101bb020b6578616d706c652e636f6d"), "VLESS TCP request, domain target")
+        try fails("VLESS header sent twice") { _ = try stream.requestHeader() }
+        let v6 = try VLESSSession(uuid: user, destinationHost: "2001:db8::1", destinationPort: 8443, udp: false)
+        try check(try v6.requestHeader() == hex("00de305d5475b4431badb2eb6b9e546014000120fb0320010db8000000000000000000000001"), "VLESS IPv6 target uses type 3")
+        try fails("VLESS invalid UUID") { _ = try VLESSSession(uuid: "nope", destinationHost: "example.com", destinationPort: 443, udp: false) }
+
+        let response = hex("0000") + Data("hello VLESS".utf8)
+        var reader = try VLESSSession(uuid: user, destinationHost: "example.com", destinationPort: 443, udp: false)
+        var text = Data()
+        for byte in response { for chunk in try reader.decodeResponse(Data([byte])) { text.append(chunk) } }
+        try check(text == Data("hello VLESS".utf8), "VLESS response header stripped across every split")
+        try reader.finishReceiving()
+        reader = try VLESSSession(uuid: user, destinationHost: "example.com", destinationPort: 443, udp: false)
+        try check(try reader.decodeResponse(hex("0002aabb") + Data("x".utf8)) == [Data("x".utf8)], "VLESS response addons skipped")
+        reader = try VLESSSession(uuid: user, destinationHost: "example.com", destinationPort: 443, udp: false)
+        try fails("VLESS unknown response version") { _ = try reader.decodeResponse(hex("0100")) }
+        reader = try VLESSSession(uuid: user, destinationHost: "example.com", destinationPort: 443, udp: false)
+        _ = try reader.decodeResponse(hex("0003aa"))
+        try fails("VLESS stream ends inside its response header") { try reader.finishReceiving() }
+        reader = try VLESSSession(uuid: user, destinationHost: "example.com", destinationPort: 443, udp: false)
+        try reader.finishReceiving()   // closed before any response: a clean, empty stream
+
+        let datagrams = try VLESSSession(uuid: user, destinationHost: "192.0.2.1", destinationPort: 53, udp: true)
+        try fails("VLESS datagram before request") { _ = try datagrams.encodeDatagram(Data([1])) }
+        try check(try datagrams.requestHeader() == hex("00de305d5475b4431badb2eb6b9e5460140002003501c0000201"), "VLESS UDP request")
+        try check(try datagrams.encodeDatagram(Data("ping".utf8)) == hex("000470696e67"), "VLESS UDP packet framing")
+        try check(try datagrams.encodeDatagram(Data()) == hex("0000"), "VLESS carries empty datagrams")
+        try fails("VLESS oversized datagram") { _ = try datagrams.encodeDatagram(Data(count: 65_536)) }
+        let packets = hex("0000") + hex("0003") + Data("one".utf8) + hex("0000") + hex("0003") + Data("two".utf8)
+        var received = [Data]()
+        for byte in packets { received += try datagrams.decodeResponse(Data([byte])) }
+        try check(received == [Data("one".utf8), Data(), Data("two".utf8)], "VLESS UDP packets reassembled across every split")
+        try datagrams.finishReceiving()
+        let partial = try VLESSSession(uuid: user, destinationHost: "192.0.2.1", destinationPort: 53, udp: true)
+        _ = try partial.decodeResponse(hex("00000005abcd"))
+        try fails("VLESS stream ends inside a UDP packet") { try partial.finishReceiving() }
+
+        var node = ProxyNode(id: "vless", name: "VLESS", type: "vless", server: "example.com", port: 443,
+                             uuid: user, tls: true, network: "ws", wsPath: "/vless", udp: true)
+        try node.validate()
+        try check(try TransportPlan.make(for: node, datagramSocket: false) == TransportPlan(dial: .tcp, security: .systemTLS(serverName: "example.com"),
+                                      framing: .webSocket(path: "/vless", host: "example.com:443")), "VLESS WS+TLS plan")
+        node.cipher = "none"; try node.validate()
+        node.cipher = "aes-128-gcm"
+        try fails("VLESS encryption other than none") { try node.validate() }
+        node.cipher = nil; node.flow = "xtls-rprx-vision"
+        try fails("VLESS vision flow not yet supported") { try node.validate() }
+        node.flow = nil; node.uuid = "bad"
+        try fails("VLESS invalid UUID in node") { try node.validate() }
+        node.uuid = user; node.network = "grpc"
+        try fails("VLESS gRPC transport") { try node.validate() }
+    }
+
     private static func byteQueue() throws {
         var queue = ByteQueue(), reference = Data(), next: UInt8 = 0
         for round in 0..<2_000 {
@@ -352,9 +467,51 @@ enum ProtocolTests {
             _ = try ShadowsocksSession(password: "", destinationHost: "example.com",
                                        destinationPort: 443, udp: false)
         }
+        var trojan = ProxyNode(id: "trojan", name: "Trojan", type: "trojan", server: "example.com", port: 443,
+                               password: "secret", udp: true)
+        try trojan.validate()
+        try check(trojan.usesTLS && !ss.usesTLS && node.usesTLS, "Trojan implies TLS; Shadowsocks does not")
+        trojan.network = "ws"; trojan.wsPath = "/trojan"
+        try trojan.validate()
+        trojan.network = "grpc"
+        try fails("Trojan gRPC transport") { try trojan.validate() }
+        trojan.network = nil; trojan.tls = false
+        try fails("Trojan without TLS") { try trojan.validate() }
+        trojan.tls = nil; trojan.password = ""
+        try fails("Trojan empty password") { try trojan.validate() }
+        trojan.password = "secret"; trojan.skipCertVerify = true
+        try fails("Trojan insecure TLS") { try trojan.validate() }
         try check(ProxyError.dial("x").errorDescription == "x", "dial error surfaces message")
     }
 
+    private static func transportPlans() throws {
+        let ss = ProxyNode(id: "ss", name: "SS", type: "ss", server: "example.com", port: 8388,
+                           cipher: "aes-256-gcm", password: "secret", udp: true)
+        try check(try TransportPlan.make(for: ss, datagramSocket: false) == TransportPlan(dial: .tcp, security: .none, framing: .raw), "SS TCP plan")
+        try check(try TransportPlan.make(for: ss, datagramSocket: true) == TransportPlan(dial: .udp, security: .none, framing: .raw), "SS UDP plan")
+        try check(try TransportPlan.make(for: ss, datagramSocket: false).framingCarriesEOF, "raw framing carries EOF")
+        var vmess = ProxyNode(id: "v", name: "V", type: "vmess", server: "192.0.2.7", port: 8443, uuid: user,
+                              tls: true, network: "ws", wsPath: "/ray")
+        let ws = try TransportPlan.make(for: vmess, datagramSocket: false)
+        try check(ws == TransportPlan(dial: .tcp, security: .systemTLS(serverName: "192.0.2.7"),
+                                      framing: .webSocket(path: "/ray", host: "192.0.2.7:8443")), "VMess WS+TLS plan defaults")
+        try check(!ws.framingCarriesEOF, "WebSocket framing cannot carry EOF")
+        vmess.serverName = "cdn.example"; vmess.wsHost = "front.example"; vmess.wsPath = nil
+        try check(try TransportPlan.make(for: vmess, datagramSocket: false) == TransportPlan(dial: .tcp, security: .systemTLS(serverName: "cdn.example"),
+                                      framing: .webSocket(path: "/", host: "front.example")), "VMess SNI, Host and default path")
+        vmess.server = "2001:db8::7"; vmess.wsHost = nil
+        try check(try TransportPlan.make(for: vmess, datagramSocket: false).framing == .webSocket(path: "/", host: "[2001:db8::7]:8443"), "IPv6 Host literal")
+        let trojan = ProxyNode(id: "t", name: "T", type: "trojan", server: "example.com", port: 443, password: "secret")
+        try check(try TransportPlan.make(for: trojan, datagramSocket: false).security == .systemTLS(serverName: "example.com"), "Trojan implies system TLS")
+        vmess.serverName = "bad name"
+        try fails("TLS server name with a space") { _ = try TransportPlan.make(for: vmess, datagramSocket: false) }
+        vmess.serverName = nil; vmess.wsPath = "ray"
+        try fails("WebSocket path without leading slash") { _ = try TransportPlan.make(for: vmess, datagramSocket: false) }
+        vmess.wsPath = "/ray"; vmess.skipCertVerify = true
+        try fails("Plan refuses insecure TLS") { _ = try TransportPlan.make(for: vmess, datagramSocket: false) }
+    }
+
+    #if canImport(Network)
     private static func endpointResolver() throws {
         try check(ProxyEndpointResolver.literalAddress("192.0.2.10") == "192.0.2.10", "IPv4 literal")
         try check(ProxyEndpointResolver.literalAddress("2001:db8::1") == "2001:db8::1", "IPv6 literal")
@@ -367,4 +524,5 @@ enum ProtocolTests {
             try check(both.count <= 8, "resolver caps address fan-out at 8")
         }
     }
+    #endif
 }
