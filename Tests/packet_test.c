@@ -325,6 +325,31 @@ static void test_fragment_reassembly(int version, int extension) {
     assert(wlp_remote_data(e, o->id, large, large_length + 1) == -1);
     free(large); wlp_free(e); free(o);
 }
+/* RFC 791 keys IPv4 reassembly on (source, destination, protocol, id) only, so the tail
+ * of another datagram with the same id completes a partial one. The first fragment's
+ * header owns the flow tuple; a UDP checksum (when present) rejects the mixed payload. */
+static void test_fragment_cross_datagram(void) {
+    for (int with_sum = 0; with_sum < 2; ++with_sum) {
+        observer *o = calloc(1, sizeof(*o)); assert(o); wlp_engine *e = engine(o);
+        uint8_t a[256], b[256], part[256], payload[72];
+        memset(payload, 0x5a, sizeof(payload));
+        size_t n = udp(a, 4, 0, payload, sizeof(payload));
+        memset(payload, 0xa5, sizeof(payload));
+        (void)udp(b, 4, 0, payload, sizeof(payload));
+        s16(b + 20, 53001);                                    /* a different source port */
+        if (!with_sum) { a[26] = a[27] = 0; b[26] = b[27] = 0; }  /* IPv4 may omit the UDP checksum */
+        assert(n == 100);
+        size_t m = fragment_packet(part, a, 0, 40, 1, 4242); assert(wlp_input(e, part, m) == 0);
+        m = fragment_packet(part, b, 40, 40, 0, 4242); (void)wlp_input(e, part, m);
+        if (with_sum) assert(o->connects == 0);
+        else {
+            assert(o->connects == 1 && o->udp);
+            wlp_remote_open(e, o->id); assert(o->data_length == 72);
+            assert(wlp_remote_data(e, o->id, (const uint8_t *)"ok", 2) == 0);  /* reply goes to 53000 */
+        }
+        wlp_free(e); free(o);
+    }
+}
 static void test_maximum_fragment_payload(int version) {
     observer *o = calloc(1, sizeof(*o)); assert(o); wlp_engine *e = engine(o);
     size_t length = version == 4 ? 65507 : 65527;
@@ -532,7 +557,7 @@ int main(void) {
     test_limits_timeouts_and_fast_retransmit(); test_transmit_budget(); test_receive_buffer_release();
     test_fragment_reassembly(4, 0); test_fragment_reassembly(6, 0); test_fragment_reassembly(6, 1);
     test_maximum_fragment_payload(4); test_maximum_fragment_payload(6);
-    test_fragment_rejection_and_expiry(); test_tcp_option_policy(); test_window_scaling(); test_malformed();
+    test_fragment_rejection_and_expiry(); test_fragment_cross_datagram(); test_tcp_option_policy(); test_window_scaling(); test_malformed();
 #ifndef __APPLE__
     char name[32]; errno = 0; assert(wl_tun_open(name, sizeof(name)) == -1 && errno == ENOTSUP);
 #endif

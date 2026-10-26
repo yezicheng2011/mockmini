@@ -3,6 +3,17 @@
 All notable changes to MockMini are recorded here. Versions follow
 [Semantic Versioning](https://semver.org/); until 1.0.0, minor versions may change the API.
 
+## [Unreleased]
+
+### Tests
+- Fixed an intermittent libFuzzer failure (`REQUIRE(t->id == 0)` in `on_connect`, seen on
+  the v0.1.0 CI run). The engine was correct: RFC 791 reassembly keys only on source,
+  destination, protocol and id, so with the UDP checksum omitted a stale fragment of one
+  tuple plus a tail from another completes under the first fragment's ports. The harness
+  attributed that connect to the wrong tuple; fragment ids are now tuple-disjoint.
+- New `test_fragment_cross_datagram` pins this behaviour: the mix completes under the
+  first fragment's tuple when the IPv4 UDP checksum is zero, and is rejected when present.
+
 ## [0.1.0] - 2026-10-24
 
 First tagged release.
