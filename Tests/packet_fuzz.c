@@ -33,6 +33,7 @@
 #define ACK 16u
 #define URG 32u
 #define TUPLES 160u          /* > the stress build's flow limit, so the limit is exercised */
+_Static_assert(TUPLES <= 256u, "fragment ids embed the tuple index in 8 bits");
 #define MSS_CAP 1200u
 #define TX_CAP 262144u
 #define RX_CAP 32768u
@@ -316,14 +317,19 @@ static size_t build(world *w, source *s, unsigned ti, uint8_t *out, size_t cap) 
 /* Split a datagram into (possibly shuffled / duplicated / dropped) fragments.
  * IPv4: header copied with MF/offset. IPv6: a Fragment header (44) is inserted
  * after the fixed 40-byte header. */
-static void inject_fragments(wlp_engine *e, source *s, const uint8_t *pkt, size_t n) {
+static void inject_fragments(wlp_engine *e, source *s, unsigned tuple_index, const uint8_t *pkt, size_t n) {
     int v6 = pkt[0] >> 4 == 6;
     size_t hdr = v6 ? 40 : (size_t)(pkt[0] & 15) * 4;
     if (n <= hdr + 8) { (void)wlp_input(e, pkt, n); return; }
     size_t body = n - hdr;
     size_t step = 8 * (1 + pick(s, 64));
     static uint8_t frags[24][1700]; size_t lens[24]; unsigned count = 0;
-    uint32_t id = next32(s);
+    /* Every tuple shares one address pair, and RFC 791 reassembly keys only on
+     * (source, destination, protocol, id): a stale fragment of another tuple with the
+     * same id can complete this datagram under *its* ports (see
+     * test_fragment_cross_datagram). Keep ids tuple-disjoint so on_connect can trust
+     * in_input; same-tuple id reuse, overlap and duplicates are still exercised. */
+    uint32_t id = (v6 ? next32(s) << 8 : (next32(s) & 0xffu) << 8) | (uint32_t)tuple_index;
     for (size_t off = 0; off < body && count < 24; off += step) {
         size_t len = body - off < step ? body - off : step;
         uint8_t *f = frags[count];
@@ -391,7 +397,7 @@ static void run(source *s, unsigned long steps) {
             size_t n = build(w, s, ti, pkt, sizeof(pkt));
             w->in_input = (int)ti;
             if (n > 60 && (pkt[0] == 0x45 || (pkt[0] >> 4 == 6 && (pkt[6] == 6 || pkt[6] == 17))) && pick(s, 12) == 0)
-                inject_fragments(e, s, pkt, n);
+                inject_fragments(e, s, ti, pkt, n);
             else {
                 if (pick(s, 40) == 0) {                      /* truncate: must be rejected or handled */
                     size_t cut = pick(s, (uint32_t)n);
