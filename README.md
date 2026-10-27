@@ -110,7 +110,7 @@ Each connection is a stack of independent layers (`Sources/VPN/Layers.swift`):
 | Dial | TCP, UDP | `TransportPlan.Dial` |
 
 A new protocol is a new `ProxySession`; a new transport is a new plan case. The portable core
-(model, plans, Shadowsocks, WebSocket framing) also builds on Linux with swift-crypto.
+(model, plans, Shadowsocks, Trojan, VLESS, WebSocket framing) also builds on Linux with swift-crypto.
 
 ## Build / test
 
