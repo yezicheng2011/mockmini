@@ -7,7 +7,7 @@ import Dispatch
 /// `onReady` means the transport is connected and the request header has been queued;
 /// it does not assert that the remote proxy accepted credentials or reached the destination.
 /// VMess standard framing rejects empty UDP datagrams because they encode stream termination.
-/// Trojan UDP rides inside its TLS stream, so it dials TCP like every non-Shadowsocks protocol.
+/// Trojan UDP rides inside its proxy stream, so it dials TCP like every non-Shadowsocks protocol.
 /// The connection drives one ProxySession over the transport stack its TransportPlan describes.
 final class ProxyConnection {
     var onReady: (() -> Void)?

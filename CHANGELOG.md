@@ -5,6 +5,12 @@ All notable changes to MockMini are recorded here. Versions follow
 
 ## [Unreleased]
 
+### Protocols
+- Trojan over plaintext TCP (`tls: false`) and plaintext WebSocket; TLS stays the default.
+- Shadowsocks over WebSocket and/or system TLS (`network: ws`, `tls: true`).
+- With these, `trojan-raw-none`, `trojan-websocket-none`, `shadowsocks-raw-none` and
+  `shadowsocks-websocket-systemtls` (protocol-framing-security) are all usable.
+
 ### Tests
 - Fixed an intermittent libFuzzer failure (`REQUIRE(t->id == 0)` in `on_connect`, seen on
   the v0.1.0 CI run). The engine was correct: RFC 791 reassembly keys only on source,

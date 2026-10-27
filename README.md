@@ -75,11 +75,11 @@ The packet engine is a **small TCP/UDP proxy endpoint**, not a general IP stack:
 | TCP options negotiated | **MSS + window scaling** (RFC 7323 receive side: client shift honoured up to 14, we echo shift 0; no SACK, timestamps, ECN) |
 | Unsupported | ICMP, PMTUD, IPv6 jumbograms, IPsec, TCP urgent |
 
-Protocol surface today: **Shadowsocks AEAD (aes-128-gcm, aes-256-gcm, chacha20-ietf-poly1305)** over TCP;
+Protocol surface today: **Shadowsocks AEAD (aes-128-gcm, aes-256-gcm, chacha20-ietf-poly1305)** over TCP, TLS, WebSocket or WebSocket+TLS (UDP stays on a UDP socket);
 **VMess** (legacy + AEAD; aes-128-gcm or chacha20-poly1305 body) over TCP or WebSocket, with
-optional TLS; **Trojan** (CONNECT and UDP ASSOCIATE) over TLS or WebSocket+TLS; **VLESS**
-(TCP and UDP, no flow control yet) over TCP, TLS or WebSocket+TLS. Trojan
-always verifies the server certificate; no uTLS fingerprinting, Reality or gRPC transport. Throughput and edge protocols are still behind mature Clash/mihomo
+optional TLS; **Trojan** (CONNECT and UDP ASSOCIATE) over TCP, TLS, WebSocket or WebSocket+TLS (TLS is the default; set `tls: false` for plaintext behind a TLS-terminating proxy or on loopback); **VLESS**
+(TCP and UDP, no flow control yet) over TCP, TLS or WebSocket+TLS. Whenever
+TLS is on, the server certificate is always verified; no uTLS fingerprinting, Reality or gRPC transport. Throughput and edge protocols are still behind mature Clash/mihomo
 kernels; that gap is expected while MockMini stays original and small.
 
 ## Embedding
