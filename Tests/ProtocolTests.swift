@@ -22,8 +22,9 @@ enum ProtocolTests {
         try vmessFrames()
         try vmessChaChaFrames()
         try vmessCounterWrap()
-        try trojanFrames()
         #endif
+        try sha224Vectors()
+        try trojanFrames()
         try vlessFrames()
         try byteQueue()
         try websocketFrames()
@@ -277,6 +278,18 @@ enum ProtocolTests {
         try reader.finishReceiving()
     }
 
+    #endif
+
+    // FIPS 180-4 vectors (empty, one block, two blocks) plus 1000 bytes, checked against hashlib.
+    private static func sha224Vectors() throws {
+        func digest(_ bytes: [UInt8]) -> Data { Data(SHA224.hash(bytes)) }
+        try check(digest([]) == hex("d14a028c2a3a2bc9476102bb288234c415a2b01f828ea62ac5b3e42f"), "SHA-224 empty")
+        try check(digest(Array("abc".utf8)) == hex("23097d223405d8228642a477bda255b32aadbce4bda0b3f7e36c9da7"), "SHA-224 abc")
+        let long = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"
+        try check(digest(Array(long.utf8)) == hex("75388b16512776cc5dba5da1fd890150b0c6455cb4f58b1952522525"), "SHA-224 two blocks")
+        try check(digest([UInt8](repeating: 0x61, count: 1000)) == hex("4e8f0ce90b64661a2b5e84be6d93a7d9b76871062f1814433d04a03d"), "SHA-224 1000 bytes")
+    }
+
     // Trojan fixtures computed with Python hashlib from the public protocol description.
     private static let trojanConnect = "64363364633931396532303164376263346338323536333064326366323566646339336434623266306434363730366432393033386430310d0a01030b6578616d706c652e636f6d01bb0d0a"
     private static let trojanAssociate = "64363364633931396532303164376263346338323536333064326366323566646339336434623266306434363730366432393033386430310d0a0301c000020100350d0a"
@@ -319,8 +332,6 @@ enum ProtocolTests {
         }
         try fails("Trojan TCP session rejects datagram decoding") { _ = try stream.decodeDatagrams(vector) }
     }
-
-    #endif
 
     // VLESS fixtures computed with Python from the public protocol description.
     private static func vlessFrames() throws {
