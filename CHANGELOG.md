@@ -10,8 +10,13 @@ All notable changes to MockMini are recorded here. Versions follow
 - Shadowsocks over WebSocket and/or system TLS (`network: ws`, `tls: true`).
 - With these, `trojan-raw-none`, `trojan-websocket-none`, `shadowsocks-raw-none` and
   `shadowsocks-websocket-systemtls` (protocol-framing-security) are all usable.
+- Trojan no longer needs CommonCrypto: its SHA-224 password token comes from a small
+  original FIPS 180-4 implementation (`Sources/VPN/SHA224.swift`), so Trojan builds and its
+  wire tests run in the Linux CI job too. Tokens are byte-identical to before.
 
 ### Tests
+- SHA-224 vectors (empty, "abc", the 448-bit NIST message, 55/56/64-byte padding edges and
+  one million "a") on every platform; Trojan wire fixtures now also run on Linux.
 - Fixed an intermittent libFuzzer failure (`REQUIRE(t->id == 0)` in `on_connect`, seen on
   the v0.1.0 CI run). The engine was correct: RFC 791 reassembly keys only on source,
   destination, protocol and id, so with the UDP checksum omitted a stale fragment of one

@@ -3,7 +3,7 @@ import PackageDescription
 
 // MockMiniPacket: the portable C packet engine (wlp) and the macOS utun adapter.
 // MockMiniVPN: proxy protocols and transports. On Apple platforms it uses CryptoKit,
-// CommonCrypto and Network.framework; on Linux the portable core (model, transport plans,
+// CommonCrypto and Network.framework; on Linux the portable core (model, transport plans, Trojan,
 // Shadowsocks, WebSocket framing) builds against swift-crypto for unit tests.
 let package = Package(
     name: "MockMini",

@@ -1,6 +1,4 @@
-#if canImport(CommonCrypto)   // SHA-224 for the Trojan token
 import Foundation
-import CommonCrypto
 
 // Original implementation from the public protocol description:
 // https://trojan-gfw.github.io/trojan/protocol
@@ -32,10 +30,13 @@ final class TrojanSession {
 
     /// 56 lowercase hex characters of SHA-224(password).
     static func token(_ password: String) -> Data {
-        let input = [UInt8](password.utf8)
-        var digest = [UInt8](repeating: 0, count: Int(CC_SHA224_DIGEST_LENGTH))
-        CC_SHA224(input, CC_LONG(input.count), &digest)
-        return Data(digest.map { String(format: "%02x", $0) }.joined().utf8)
+        let hex = Array("0123456789abcdef".utf8)
+        var token = Data(capacity: SHA224.digestLength * 2)
+        for byte in SHA224.hash(password.utf8) {
+            token.append(hex[Int(byte >> 4)])
+            token.append(hex[Int(byte & 0x0f)])
+        }
+        return token
     }
 
     func requestHeader() throws -> Data {
@@ -97,4 +98,3 @@ extension TrojanSession: ProxySession {
     func transportEnded() throws { if udp { try finishReceiving() } }
     var remoteEnded: Bool { false }
 }
-#endif

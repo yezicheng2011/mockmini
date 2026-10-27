@@ -22,8 +22,9 @@ enum ProtocolTests {
         try vmessFrames()
         try vmessChaChaFrames()
         try vmessCounterWrap()
-        try trojanFrames()
         #endif
+        try sha224Vectors()
+        try trojanFrames()
         try vlessFrames()
         try byteQueue()
         try websocketFrames()
@@ -146,7 +147,7 @@ enum ProtocolTests {
         }
     }
 
-    #if canImport(CommonCrypto)   // VMess and Trojan use CommonCrypto primitives
+    #if canImport(CommonCrypto)   // VMess uses CommonCrypto AES-ECB
     private static func vmessPrimitives() throws {
         let kdf = VMessCrypto.kdf(iv, [Data("test path".utf8), Data("second".utf8)])
         try check(kdf == hex("9cb322b8eeb3fb387601a64e09fe065f09367d37926acd6f744f3f73a4001867"), "VMess nested HMAC KDF")
@@ -277,6 +278,26 @@ enum ProtocolTests {
         try reader.finishReceiving()
     }
 
+    #endif
+
+    // SHA-224 vectors: FIPS 180-4 / NIST CAVS examples, confirmed with Python hashlib.
+    // Lengths 55, 56 and 64 cover the one-block/two-block padding boundary.
+    private static func sha224Vectors() throws {
+        let vectors: [(Data, String)] = [
+            (Data(), "d14a028c2a3a2bc9476102bb288234c415a2b01f828ea62ac5b3e42f"),
+            (Data("abc".utf8), "23097d223405d8228642a477bda255b32aadbce4bda0b3f7e36c9da7"),
+            (Data("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq".utf8),
+             "75388b16512776cc5dba5da1fd890150b0c6455cb4f58b1952522525"),
+            (Data(repeating: 0x61, count: 55), "fb0bd626a70c28541dfa781bb5cc4d7d7f56622a58f01a0b1ddd646f"),
+            (Data(repeating: 0x61, count: 56), "d40854fc9caf172067136f2e29e1380b14626bf6f0dd06779f820dcd"),
+            (Data(repeating: 0x61, count: 64), "a88cd5cde6d6fe9136a4e58b49167461ea95d388ca2bdb7afdc3cbf4"),
+            (Data(repeating: 0x61, count: 1_000_000), "20794655980c91d8bbb4c1ea97618a4bf03f42581948b2ee4ee7ad67"),
+        ]
+        for (message, digest) in vectors {
+            try check(Data(SHA224.hash(message)) == hex(digest), "SHA-224 of \(message.count) bytes")
+        }
+    }
+
     // Trojan fixtures computed with Python hashlib from the public protocol description.
     private static let trojanConnect = "64363364633931396532303164376263346338323536333064326366323566646339336434623266306434363730366432393033386430310d0a01030b6578616d706c652e636f6d01bb0d0a"
     private static let trojanAssociate = "64363364633931396532303164376263346338323536333064326366323566646339336434623266306434363730366432393033386430310d0a0301c000020100350d0a"
@@ -319,8 +340,6 @@ enum ProtocolTests {
         }
         try fails("Trojan TCP session rejects datagram decoding") { _ = try stream.decodeDatagrams(vector) }
     }
-
-    #endif
 
     // VLESS fixtures computed with Python from the public protocol description.
     private static func vlessFrames() throws {
