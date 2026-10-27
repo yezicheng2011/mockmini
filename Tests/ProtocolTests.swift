@@ -470,14 +470,21 @@ enum ProtocolTests {
         var trojan = ProxyNode(id: "trojan", name: "Trojan", type: "trojan", server: "example.com", port: 443,
                                password: "secret", udp: true)
         try trojan.validate()
-        try check(trojan.usesTLS && !ss.usesTLS && node.usesTLS, "Trojan implies TLS; Shadowsocks does not")
+        try check(trojan.usesTLS && !ss.usesTLS && node.usesTLS, "Trojan defaults to TLS; Shadowsocks does not")
+        ss.password = "secret"; ss.network = "ws"; ss.tls = true
+        try ss.validate()
+        ss.network = "grpc"
+        try fails("Shadowsocks gRPC transport") { try ss.validate() }
         trojan.network = "ws"; trojan.wsPath = "/trojan"
         try trojan.validate()
         trojan.network = "grpc"
         try fails("Trojan gRPC transport") { try trojan.validate() }
         trojan.network = nil; trojan.tls = false
-        try fails("Trojan without TLS") { try trojan.validate() }
-        trojan.tls = nil; trojan.password = ""
+        try trojan.validate()
+        try check(!trojan.usesTLS, "Trojan accepts an explicit tls=false")
+        trojan.network = "ws"
+        try trojan.validate()
+        trojan.network = nil; trojan.tls = nil; trojan.password = ""
         try fails("Trojan empty password") { try trojan.validate() }
         trojan.password = "secret"; trojan.skipCertVerify = true
         try fails("Trojan insecure TLS") { try trojan.validate() }
@@ -503,6 +510,16 @@ enum ProtocolTests {
         try check(try TransportPlan.make(for: vmess, datagramSocket: false).framing == .webSocket(path: "/", host: "[2001:db8::7]:8443"), "IPv6 Host literal")
         let trojan = ProxyNode(id: "t", name: "T", type: "trojan", server: "example.com", port: 443, password: "secret")
         try check(try TransportPlan.make(for: trojan, datagramSocket: false).security == .systemTLS(serverName: "example.com"), "Trojan implies system TLS")
+        // The four layer combinations: protocol-framing-security.
+        var plain = trojan; plain.tls = false
+        try check(try TransportPlan.make(for: plain, datagramSocket: false) == TransportPlan(dial: .tcp, security: .none, framing: .raw), "trojan-raw tcp-none plan")
+        plain.network = "ws"; plain.wsPath = "/t"
+        try check(try TransportPlan.make(for: plain, datagramSocket: false) == TransportPlan(dial: .tcp, security: .none,
+                  framing: .webSocket(path: "/t", host: "example.com:443")), "trojan-websocket-none plan")
+        var wsss = ss; wsss.network = "ws"; wsss.tls = true; wsss.wsPath = "/ss"
+        try check(try TransportPlan.make(for: wsss, datagramSocket: false) == TransportPlan(dial: .tcp, security: .systemTLS(serverName: "example.com"),
+                  framing: .webSocket(path: "/ss", host: "example.com:8388")), "shadowsocks-websocket-systemtls plan")
+        try check(try TransportPlan.make(for: wsss, datagramSocket: true) == TransportPlan(dial: .udp, security: .none, framing: .raw), "SS UDP stays on the datagram socket")
         vmess.serverName = "bad name"
         try fails("TLS server name with a space") { _ = try TransportPlan.make(for: vmess, datagramSocket: false) }
         vmess.serverName = nil; vmess.wsPath = "ray"

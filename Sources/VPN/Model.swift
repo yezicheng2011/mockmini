@@ -49,8 +49,9 @@ public struct ProxyNode: Codable, Hashable, Identifiable, Sendable {
         self.flow = flow
     }
 
-    /// Trojan always runs inside TLS, so subscriptions often leave `tls` unset for it.
-    var usesTLS: Bool { tls == true || type.lowercased() == "trojan" }
+    /// Trojan defaults to TLS, so subscriptions often leave `tls` unset for it; an explicit
+    /// `tls: false` selects plaintext for servers behind a TLS-terminating proxy or on loopback.
+    var usesTLS: Bool { tls ?? (type.lowercased() == "trojan") }
 
     public func validate() throws {
         guard !server.isEmpty, !server.contains(where: { $0.isWhitespace || $0.isNewline }),
@@ -63,8 +64,8 @@ public struct ProxyNode: Codable, Hashable, Identifiable, Sendable {
             guard ShadowsocksCipher(name: cipher) != nil, password != nil else {
                 throw ProxyError.unsupported("Shadowsocks requires a password and one of aes-128-gcm, aes-256-gcm, chacha20-ietf-poly1305")
             }
-            guard tls != true, network == nil || network == "tcp" else {
-                throw ProxyError.unsupported("Shadowsocks transport plugins are not supported")
+            guard ["tcp", "ws"].contains((network ?? "tcp").lowercased()) else {
+                throw ProxyError.unsupported("Shadowsocks requires TCP or WebSocket transport")
             }
         case "vmess":
             guard UUID(uuidString: uuid ?? "") != nil else {
@@ -96,7 +97,6 @@ public struct ProxyNode: Codable, Hashable, Identifiable, Sendable {
             guard let password, !password.isEmpty else {
                 throw ProxyError.configuration("Trojan requires a non-empty password")
             }
-            guard tls != false else { throw ProxyError.unsupported("Trojan always runs over TLS") }
             guard ["tcp", "ws"].contains((network ?? "tcp").lowercased()) else {
                 throw ProxyError.unsupported("Trojan requires TCP or WebSocket transport")
             }
