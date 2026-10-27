@@ -10,8 +10,6 @@ All notable changes to MockMini are recorded here. Versions follow
 - Shadowsocks over WebSocket and/or system TLS (`network: ws`, `tls: true`).
 - With these, `trojan-raw-none`, `trojan-websocket-none`, `shadowsocks-raw-none` and
   `shadowsocks-websocket-systemtls` (protocol-framing-security) are all usable.
-- Trojan no longer depends on CommonCrypto: it uses a self-written SHA-224, so Trojan and its
-  tests build and run on Linux CI as well as macOS.
 
 ### Tests
 - Fixed an intermittent libFuzzer failure (`REQUIRE(t->id == 0)` in `on_connect`, seen on
