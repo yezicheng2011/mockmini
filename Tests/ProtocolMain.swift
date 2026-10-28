@@ -10,10 +10,10 @@ enum ProtocolMain {
     static func main() {
         do {
             try ProtocolTests.run()
-            #if canImport(CommonCrypto) && canImport(Network)
-            let scope = "primitives, Shadowsocks, VMess, SHA-224, Trojan, VLESS, WebSocket, config, transport plans, resolver"
+            #if canImport(Network)
+            let scope = "primitives, AES-128, Shadowsocks, VMess, SHA-224, Trojan, VLESS, WebSocket, config, transport plans, resolver"
             #else
-            let scope = "portable core: primitives, Shadowsocks, SHA-224, Trojan, VLESS, WebSocket, config, transport plans"
+            let scope = "portable core: primitives, AES-128, Shadowsocks, VMess, SHA-224, Trojan, VLESS, WebSocket, config, transport plans"
             #endif
             print("protocol tests passed: \(scope)")
         } catch {
