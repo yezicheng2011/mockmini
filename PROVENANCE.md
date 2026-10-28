@@ -8,7 +8,8 @@ source or binary (including mihomo, clash, sing-box, gVisor, or WireGuard) is
 included or vendored.
 
 Allowed runtime dependencies are platform-provided: Network.framework,
-Security/CryptoKit/CommonCrypto, and Darwin utun on Apple platforms. The C
+Security/CryptoKit, and Darwin utun on Apple platforms (CommonCrypto is no longer used:
+SHA-224 and the AES-128 block cipher are original code in `Sources/VPN`). The C
 packet engine (`Sources/Packet/wlp.c`) is portable and has no third-party code.
 
 Protocol references (not incorporated source):
