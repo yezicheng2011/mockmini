@@ -19,11 +19,19 @@ All notable changes to MockMini are recorded here. Versions follow
   dependency at all, and all VMess wire fixtures (AEAD and legacy, AES-GCM and ChaCha20) are
   byte-identical to before.
 
+### Performance
+- WebSocket client frames are now built in one allocation and masked in place instead of
+  appending each masked payload byte to a growing `Data`. Output is byte-identical; this
+  removes a per-byte cost from every VMess/VLESS/Trojan/Shadowsocks-over-WebSocket upload.
+
 ### Tests
 - SHA-224 vectors (empty, "abc", the 448-bit NIST message, 55/56/64-byte padding edges and
   one million "a") on every platform; Trojan wire fixtures now also run on Linux.
 - AES-128 vectors (FIPS 197 appendices B and C.1, SP 800-38A ECB-AES128) plus the existing
   NIST CFB128 and VMess wire fixtures now run in the Linux CI job.
+- WebSocket client masking checked against a naive reference at every length-encoding
+  boundary (0 to 300,001 bytes), including sliced payloads with a non-zero start index,
+  plus the 2 MiB data-frame and 125-byte control-frame limits.
 - Fixed an intermittent libFuzzer failure (`REQUIRE(t->id == 0)` in `on_connect`, seen on
   the v0.1.0 CI run). The engine was correct: RFC 791 reassembly keys only on source,
   destination, protocol and id, so with the UDP checksum omitted a stale fragment of one
