@@ -13,17 +13,18 @@ All notable changes to MockMini are recorded here. Versions follow
 - Trojan no longer needs CommonCrypto: its SHA-224 password token comes from a small
   original FIPS 180-4 implementation (`Sources/VPN/SHA224.swift`), so Trojan builds and its
   wire tests run in the Linux CI job too. Tokens are byte-identical to before.
-- VMess no longer needs CommonCrypto either: the AES-128 block cipher it uses for the legacy
-  CFB128 header and the AEAD auth ID is a small original FIPS 197 implementation
-  (`Sources/VPN/AES128.swift`). VMess now builds on Linux, MockMiniVPN has no CommonCrypto
-  dependency at all, and all VMess wire fixtures (AEAD and legacy, AES-GCM and ChaCha20) are
-  byte-identical to before.
+- VMess builds on Linux and its wire fixtures (AEAD and legacy, AES-GCM and ChaCha20)
+  remain byte-identical. The AES-128 block cipher used for the legacy CFB128 header and
+  AEAD auth ID now comes from CommonCrypto on Apple and swift-crypto's BoringSSL-backed
+  `AES.permute` on Linux, replacing the secret-indexed S-box implementation.
 
 ### Tests
 - SHA-224 vectors (empty, "abc", the 448-bit NIST message, 55/56/64-byte padding edges and
   one million "a") on every platform; Trojan wire fixtures now also run on Linux.
 - AES-128 vectors (FIPS 197 appendices B and C.1, SP 800-38A ECB-AES128) plus the existing
   NIST CFB128 and VMess wire fixtures now run in the Linux CI job.
+- The AES vector and VMess wire tests cover both platform/library backends; ciphertext
+  tests alone do not establish side-channel resistance.
 - Fixed an intermittent libFuzzer failure (`REQUIRE(t->id == 0)` in `on_connect`, seen on
   the v0.1.0 CI run). The engine was correct: RFC 791 reassembly keys only on source,
   destination, protocol and id, so with the UDP checksum omitted a stale fragment of one

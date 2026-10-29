@@ -2,7 +2,7 @@
 import PackageDescription
 
 // MockMiniPacket: the portable C packet engine (wlp) and the macOS utun adapter.
-// MockMiniVPN: proxy protocols and transports. On Apple platforms it uses CryptoKit, Security
+// MockMiniVPN: proxy protocols and transports. On Apple platforms it uses CryptoKit, CommonCrypto, Security
 // and Network.framework; on Linux the portable core (model, transport plans, Trojan, VMess,
 // Shadowsocks, WebSocket framing) builds against swift-crypto for unit tests.
 let package = Package(
@@ -19,8 +19,12 @@ let package = Package(
         .target(name: "MockMiniPacket", path: "Sources/Packet", exclude: ["README.md"],
                 publicHeadersPath: "."),
         .target(name: "MockMiniVPN",
-                dependencies: [.product(name: "Crypto", package: "swift-crypto",
-                                        condition: .when(platforms: [.linux]))],
+                dependencies: [
+                    .product(name: "Crypto", package: "swift-crypto",
+                             condition: .when(platforms: [.linux])),
+                    .product(name: "_CryptoExtras", package: "swift-crypto",
+                             condition: .when(platforms: [.linux])),
+                ],
                 path: "Sources/VPN"),
         .executableTarget(name: "mockmini-protocol-tests", dependencies: ["MockMiniVPN"], path: "Tests",
                           exclude: ["README.md", "packet_test.c", "packet_fuzz.c", "interop", "InteropMain.swift"],
