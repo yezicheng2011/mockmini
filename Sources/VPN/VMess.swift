@@ -81,7 +81,7 @@ enum VMessCrypto {
     }
 }
 
-/// CFB128 preserves state across partial header reads. The block cipher is AES128 (FIPS 197).
+/// CFB128 preserves state across partial header reads. AES blocks use a platform/library primitive.
 final class AESCFB128 {
     private let cipher: AES128
     private let decrypt: Bool
@@ -95,7 +95,7 @@ final class AESCFB128 {
     func update(_ input: Data) throws -> Data {
         var output = Data(); output.reserveCapacity(input.count)
         for byte in input {
-            if index == 0 { stream = cipher.encrypt(feedback) }
+            if index == 0 { stream = try cipher.encrypt(feedback) }
             let converted = byte ^ stream[index]
             output.append(converted)
             feedback[index] = decrypt ? byte : converted
