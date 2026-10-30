@@ -97,11 +97,20 @@ final class ProxyConnection {
     private func transportReady() {
         guard !closed else { return }
         do {
-            if let opening = try session?.openingBytes() { transport?.send(opening) }
             ready = true
             timeout?.cancel(); timeout = nil
             let waiting = pending; pending.removeAll(); pendingBytes = 0
-            for packet in waiting { try transmit(packet) }
+            if streamWrites {
+                // Header and early data leave together: one TLS record / WebSocket frame
+                // instead of one per queued write, and no header-only first segment.
+                var chunks = [Data]()
+                if let opening = try session?.openingBytes() { chunks.append(opening) }
+                for packet in waiting { chunks += try session?.encode(packet) ?? [] }
+                for write in StreamCoalescer.coalesce(chunks) { transport?.send(write) }
+            } else {
+                if let opening = try session?.openingBytes() { transport?.send(opening) }
+                for packet in waiting { try transmit(packet) }
+            }
             if finishPending { try finishTransportWriting() }
             onReady?()
         } catch { fail(error) }
@@ -120,8 +129,13 @@ final class ProxyConnection {
         do { try transmit(data) } catch { fail(error) }
     }
 
+    /// True when the transport is a byte stream (TCP, optionally TLS/WebSocket), so wire
+    /// chunks may be merged into fewer writes. False for a UDP socket: one write, one datagram.
+    private var streamWrites: Bool { plan?.dial == .tcp }
+
     private func transmit(_ data: Data) throws {
-        for chunk in try session?.encode(data) ?? [] { transport?.send(chunk) }
+        let chunks = try session?.encode(data) ?? []
+        for chunk in streamWrites ? StreamCoalescer.coalesce(chunks) : chunks { transport?.send(chunk) }
     }
 
     private func finishWritingOnQueue() {

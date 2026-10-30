@@ -70,3 +70,31 @@ struct TransportPlan: Equatable {
         return TransportPlan(dial: .tcp, security: security, framing: framing)
     }
 }
+
+/// Joins consecutive stream wire chunks into as few writes as possible, keeping order and
+/// bytes exactly, and never building one write larger than `limit` unless a single input
+/// chunk already is. Stream protocols (Shadowsocks AEAD chunks, VMess body chunks, the
+/// opening header plus early data) have their own framing, so how the bytes are split
+/// into writes is invisible to the server. Fewer writes means fewer TLS records, fewer
+/// WebSocket frames and fewer transport sends. Never use it for a UDP socket, where each
+/// write is one datagram.
+enum StreamCoalescer {
+    /// 256 KiB stays far below the 2 MiB WebSocket frame cap and bounds copy size.
+    static let defaultLimit = 256 * 1024
+
+    static func coalesce(_ chunks: [Data], limit: Int = defaultLimit) -> [Data] {
+        guard chunks.count > 1 else { return chunks.filter { !$0.isEmpty } }
+        let total = chunks.reduce(0) { $0 + $1.count }
+        var writes = [Data](); var current = Data()
+        for chunk in chunks where !chunk.isEmpty {
+            if !current.isEmpty, current.count + chunk.count > limit {
+                writes.append(current); current = Data()
+            }
+            if current.isEmpty, chunk.count >= limit { writes.append(chunk); continue }
+            if current.isEmpty { current.reserveCapacity(min(limit, total)) }
+            current.append(chunk)
+        }
+        if !current.isEmpty { writes.append(current) }
+        return writes
+    }
+}
