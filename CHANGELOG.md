@@ -23,8 +23,18 @@ All notable changes to MockMini are recorded here. Versions follow
 - WebSocket client frames are now built in one allocation and masked in place instead of
   appending each masked payload byte to a growing `Data`. Output is byte-identical; this
   removes a per-byte cost from every VMess/VLESS/Trojan/Shadowsocks-over-WebSocket upload.
+- Stream connections now merge the wire chunks of one application write into as few
+  transport writes as possible (`StreamCoalescer`, capped at 256 KiB per write). A 40 KB
+  Shadowsocks or VMess upload used to leave as three separate sends (three TLS records,
+  three WebSocket frames); it is now one. When a connection becomes ready, the protocol
+  header and all data queued while dialing also go out together, so the first segment is no
+  longer a header on its own. Bytes on the wire are unchanged; UDP sockets (Shadowsocks UDP)
+  still send exactly one datagram per write.
 
 ### Tests
+- Stream write coalescing: empty input, single chunk, empty-chunk dropping, exact-limit and
+  oversize-chunk cases, 200 randomized chunk sets (bytes identical, limit respected), and a
+  Shadowsocks header plus three AEAD chunks leaving as one write.
 - SHA-224 vectors (empty, "abc", the 448-bit NIST message, 55/56/64-byte padding edges and
   one million "a") on every platform; Trojan wire fixtures now also run on Linux.
 - AES-128 vectors (FIPS 197 appendices B and C.1, SP 800-38A ECB-AES128) plus the existing
