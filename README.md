@@ -2,13 +2,13 @@
 
 **A small, auditable proxy core in C and Swift.** Shadowsocks AEAD, VMess, Trojan and
 VLESS over TCP, TLS or WebSocket, on top of a bounded userspace TCP/IP endpoint.
-About 2,600 lines, fuzzed, Apache-2.0.
+3,001 lines, fuzzed, Apache-2.0.
 
 **Site:** https://mockmini.com/  
 **License:** Apache License 2.0 (`LICENSE`, `NOTICE`) · credit **daniel.ye**  
 **Releases:** see [`CHANGELOG.md`](CHANGELOG.md) — current version **0.1.0**
 
-- **Small enough to review.** The whole core is about 2,600 lines of C and Swift.
+- **Small enough to review.** The whole core is 3,001 lines of C and Swift.
   No vendored proxy kernel, no third-party TCP/IP stack, no Go runtime. It is
   **not** based on mihomo, Clash, sing-box, gVisor, or WireGuard.
 - **Tested hard.** A stateful, checksum-aware fuzzer (≈99% line coverage of the
