@@ -5,7 +5,7 @@ VLESS over TCP, TLS or WebSocket, on top of a bounded userspace TCP/IP endpoint.
 3,001 lines, fuzzed, Apache-2.0.
 
 **Site:** https://mockmini.com/  
-**License:** Apache License 2.0 (`LICENSE`, `NOTICE`) · credit **daniel.yeå¶å­è¯**  
+**License:** Apache License 2.0 (`LICENSE`, `NOTICE`) · credit **daniel.ye (Ye Zicheng)**  
 **Releases:** see [`CHANGELOG.md`](CHANGELOG.md) — current version **0.1.0**
 
 - **Small enough to review.** The whole core is 3,001 lines of C and Swift.
